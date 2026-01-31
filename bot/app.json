@@ -29,9 +29,17 @@
     "BOT_TOKEN": {
       "description": "Telegram Bot Token (@BotFather'dan alın)",
       "required": true
+    },
+    "PROJECT_PATH": {
+      "description": "Bot klasörünün yolu",
+      "required": true,
+      "value": "bot"
     }
   },
   "buildpacks": [
+    {
+      "url": "https://github.com/timanovsky/subdir-heroku-buildpack"
+    },
     {
       "url": "heroku/python"
     }
