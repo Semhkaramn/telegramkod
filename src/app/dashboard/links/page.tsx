@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,7 +14,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Link2, Plus, Trash2, Radio, Edit2, Save } from "lucide-react";
+import { Link2, Plus, Trash2, Radio, Edit2, Save, Search, Info, ArrowRight, Lightbulb } from "lucide-react";
 
 interface AdminLink {
   id: number;
@@ -43,6 +43,7 @@ export default function LinksPage() {
   const [selectedChannel, setSelectedChannel] = useState<string>("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isBulkDialogOpen, setIsBulkDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Form states
   const [linkCode, setLinkCode] = useState("");
@@ -157,17 +158,20 @@ export default function LinksPage() {
     }
   };
 
-  const filteredLinks = links.filter(
-    (link) => link.channel_id === selectedChannel
-  );
+  const filteredLinks = links
+    .filter((link) => link.channel_id === selectedChannel)
+    .filter((link) =>
+      link.link_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      link.link_url.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
   if (loading) {
     return (
       <div className="space-y-6">
-        <Skeleton className="h-10 w-64 bg-zinc-800" />
+        <Skeleton className="h-10 w-64 bg-slate-800" />
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {[...Array(6)].map((_, i) => (
-            <Skeleton key={i} className="h-24 bg-zinc-800" />
+            <Skeleton key={i} className="h-24 bg-slate-800" />
           ))}
         </div>
       </div>
@@ -176,22 +180,72 @@ export default function LinksPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Link Ozellestirme</h1>
-          <p className="text-zinc-400">
-            Kanallariniz icin ozel linkler tanimlayin
+          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+            <Link2 className="h-7 w-7 text-blue-500" />
+            Link Özelleştirme
+          </h1>
+          <p className="text-slate-400 mt-1">
+            Kanallarınız için özel linkler tanımlayın
           </p>
         </div>
       </div>
 
+      {/* Info Card - How it works */}
+      <Card className="bg-gradient-to-br from-blue-900/30 to-slate-900 border-blue-700/30">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-white flex items-center gap-2 text-lg">
+            <Lightbulb className="h-5 w-5 text-yellow-400" />
+            Nasıl Çalışır?
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-3 text-sm text-slate-300">
+            <p className="flex items-start gap-2">
+              <Info className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
+              <span>
+                <strong className="text-white">Link Kodu:</strong> Gelen mesajlarda veya kodlarda aranacak kelime.
+                Örneğin "google" yazarsanız, mesajda "google" geçtiğinde link değiştirilir.
+              </span>
+            </p>
+            <p className="flex items-start gap-2">
+              <Info className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
+              <span>
+                <strong className="text-white">Link URL:</strong> Bulunan kelimenin yerine koyulacak link.
+                Bu sizin özel linkiniz olacak.
+              </span>
+            </p>
+            <div className="p-4 mt-3 rounded-xl bg-slate-800/50 border border-slate-700">
+              <p className="text-blue-300 font-medium mb-2">Örnek Kullanım:</p>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <Badge className="bg-blue-600/20 text-blue-400 border-blue-500/30">google</Badge>
+                  <span className="text-slate-400">kelimesi</span>
+                </div>
+                <ArrowRight className="h-4 w-4 text-slate-500 hidden sm:block" />
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400">→</span>
+                  <span className="text-green-400">https://sizin-linkiniz.com</span>
+                  <span className="text-slate-400">ile değiştirilir</span>
+                </div>
+              </div>
+              <p className="text-slate-500 text-xs mt-3">
+                Mesajda "Hemen google.com'a gir" yazıyorsa → "Hemen https://sizin-linkiniz.com'a gir" olarak değiştirilir.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {userChannels.length === 0 ? (
-        <Card className="border-zinc-800 bg-zinc-900">
+        <Card className="border-slate-700 bg-slate-900">
           <CardContent className="py-12 text-center">
-            <Radio className="mx-auto h-12 w-12 text-zinc-600" />
-            <p className="mt-4 text-zinc-400">Henuz atanmis kanaliniz yok.</p>
-            <p className="text-sm text-zinc-500">
-              Super admin tarafindan kanal atanmasi gerekiyor.
+            <Radio className="mx-auto h-12 w-12 text-slate-600" />
+            <p className="mt-4 text-slate-400">Henüz atanmış kanalınız yok.</p>
+            <p className="text-sm text-slate-500">
+              Süper admin tarafından kanal atanması gerekiyor.
             </p>
           </CardContent>
         </Card>
@@ -199,7 +253,7 @@ export default function LinksPage() {
         <>
           {/* Channel Selector */}
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-sm text-zinc-400">Kanal Secin:</span>
+            <span className="text-sm text-slate-400">Kanal Seçin:</span>
             {userChannels.map((uc) => (
               <Button
                 key={uc.channelId}
@@ -208,8 +262,8 @@ export default function LinksPage() {
                 onClick={() => setSelectedChannel(uc.channelId)}
                 className={
                   selectedChannel === uc.channelId
-                    ? "bg-emerald-600 hover:bg-emerald-700"
-                    : "border-zinc-700 text-zinc-400 hover:bg-zinc-800"
+                    ? "bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 shadow-lg shadow-blue-500/25"
+                    : "border-slate-700 text-slate-400 hover:bg-slate-800"
                 }
               >
                 {uc.channel.channelName || `Kanal ${uc.channelId}`}
@@ -217,109 +271,125 @@ export default function LinksPage() {
             ))}
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex gap-3">
-            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="bg-emerald-600 hover:bg-emerald-700">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Link Ekle
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="border-zinc-800 bg-zinc-900">
-                <DialogHeader>
-                  <DialogTitle className="text-white">Yeni Link Ekle</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 pt-4">
-                  <div>
-                    <label className="text-sm text-zinc-400">Link Kodu</label>
-                    <Input
-                      placeholder="ornek: deneme, google, test"
-                      value={linkCode}
-                      onChange={(e) => setLinkCode(e.target.value)}
-                      className="mt-1 border-zinc-700 bg-zinc-800 text-white"
-                    />
-                    <p className="mt-1 text-xs text-zinc-500">
-                      Kod icinde bu kelime gectiginde link degistirilir
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-sm text-zinc-400">Link URL</label>
-                    <Input
-                      placeholder="https://example.com"
-                      value={linkUrl}
-                      onChange={(e) => setLinkUrl(e.target.value)}
-                      className="mt-1 border-zinc-700 bg-zinc-800 text-white"
-                    />
-                  </div>
-                  <Button
-                    onClick={handleAddLink}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700"
-                    disabled={!linkCode || !linkUrl}
-                  >
-                    <Save className="mr-2 h-4 w-4" />
-                    Kaydet
+          {/* Search and Action Buttons */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Link ara (kod veya URL)..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 bg-slate-900 border-slate-700 text-white focus:border-blue-500"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button className="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 shadow-lg shadow-blue-500/25">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Link Ekle
                   </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent className="border-slate-700 bg-slate-900">
+                  <DialogHeader>
+                    <DialogTitle className="text-white">Yeni Link Ekle</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 pt-4">
+                    <div>
+                      <label className="text-sm text-slate-400">Link Kodu (Aranacak Kelime)</label>
+                      <Input
+                        placeholder="Örnek: google, deneme, test"
+                        value={linkCode}
+                        onChange={(e) => setLinkCode(e.target.value)}
+                        className="mt-1 border-slate-700 bg-slate-800 text-white focus:border-blue-500"
+                      />
+                      <p className="mt-1 text-xs text-blue-400">
+                        Mesajda bu kelime geçtiğinde link değiştirilir
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-sm text-slate-400">Link URL (Sizin Linkiniz)</label>
+                      <Input
+                        placeholder="https://example.com"
+                        value={linkUrl}
+                        onChange={(e) => setLinkUrl(e.target.value)}
+                        className="mt-1 border-slate-700 bg-slate-800 text-white focus:border-blue-500"
+                      />
+                    </div>
+                    <Button
+                      onClick={handleAddLink}
+                      className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600"
+                      disabled={!linkCode || !linkUrl}
+                    >
+                      <Save className="mr-2 h-4 w-4" />
+                      Kaydet
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
 
-            <Dialog open={isBulkDialogOpen} onOpenChange={setIsBulkDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" className="border-zinc-700 text-zinc-400 hover:bg-zinc-800">
-                  <Edit2 className="mr-2 h-4 w-4" />
-                  Toplu Ekle
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="border-zinc-800 bg-zinc-900">
-                <DialogHeader>
-                  <DialogTitle className="text-white">Toplu Link Ekle</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 pt-4">
-                  <div>
-                    <label className="text-sm text-zinc-400">
-                      Her satira bir link yazin (kod + URL)
-                    </label>
-                    <Textarea
-                      placeholder={`deneme www.deneme.com\ngoogle www.google.com\ntest https://test.com`}
-                      value={bulkLinks}
-                      onChange={(e) => setBulkLinks(e.target.value)}
-                      className="mt-1 h-40 border-zinc-700 bg-zinc-800 text-white"
-                    />
-                  </div>
-                  <Button
-                    onClick={handleBulkAdd}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700"
-                    disabled={!bulkLinks.trim()}
-                  >
-                    <Save className="mr-2 h-4 w-4" />
-                    Hepsini Ekle
+              <Dialog open={isBulkDialogOpen} onOpenChange={setIsBulkDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="border-slate-700 text-slate-400 hover:bg-slate-800">
+                    <Edit2 className="mr-2 h-4 w-4" />
+                    Toplu Ekle
                   </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent className="border-slate-700 bg-slate-900">
+                  <DialogHeader>
+                    <DialogTitle className="text-white">Toplu Link Ekle</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 pt-4">
+                    <div>
+                      <label className="text-sm text-slate-400">
+                        Her satıra bir link yazın (kod + URL)
+                      </label>
+                      <Textarea
+                        placeholder={`deneme www.deneme.com\ngoogle www.google.com\ntest https://test.com`}
+                        value={bulkLinks}
+                        onChange={(e) => setBulkLinks(e.target.value)}
+                        className="mt-1 h-40 border-slate-700 bg-slate-800 text-white"
+                      />
+                    </div>
+                    <Button
+                      onClick={handleBulkAdd}
+                      className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600"
+                      disabled={!bulkLinks.trim()}
+                    >
+                      <Save className="mr-2 h-4 w-4" />
+                      Hepsini Ekle
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
 
           {/* Links List */}
-          <Card className="border-zinc-800 bg-zinc-900">
+          <Card className="border-slate-700 bg-slate-900">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-white">
-                <Link2 className="h-5 w-5 text-emerald-500" />
-                Link Ozellestirmeleri
-                <Badge variant="secondary" className="ml-2 bg-zinc-800 text-zinc-400">
+                <Link2 className="h-5 w-5 text-blue-500" />
+                Link Özelleştirmeleri
+                <Badge variant="secondary" className="ml-2 bg-slate-800 text-slate-400">
                   {filteredLinks.length} link
                 </Badge>
               </CardTitle>
+              {searchQuery && (
+                <CardDescription className="text-slate-400">
+                  "{searchQuery}" için arama sonuçları
+                </CardDescription>
+              )}
             </CardHeader>
             <CardContent>
               {filteredLinks.length === 0 ? (
                 <div className="py-8 text-center">
-                  <Link2 className="mx-auto h-12 w-12 text-zinc-600" />
-                  <p className="mt-4 text-zinc-400">
-                    Bu kanal icin henuz link eklenmemis.
+                  <Link2 className="mx-auto h-12 w-12 text-slate-600" />
+                  <p className="mt-4 text-slate-400">
+                    {searchQuery ? "Arama sonucu bulunamadı." : "Bu kanal için henüz link eklenmemiş."}
                   </p>
-                  <p className="text-sm text-zinc-500">
-                    &quot;Link Ekle&quot; butonunu kullanarak ekleyebilirsiniz.
+                  <p className="text-sm text-slate-500">
+                    {!searchQuery && '"Link Ekle" butonunu kullanarak ekleyebilirsiniz.'}
                   </p>
                 </div>
               ) : (
@@ -327,19 +397,20 @@ export default function LinksPage() {
                   {filteredLinks.map((link) => (
                     <div
                       key={link.id}
-                      className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950 p-4"
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-800/50 p-4 hover:bg-slate-800 transition-colors"
                     >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3">
-                          <Badge className="bg-emerald-600/20 text-emerald-400">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <Badge className="bg-blue-600/20 text-blue-400 border-blue-500/30">
                             {link.link_code}
                           </Badge>
-                          <span className="text-zinc-300">&rarr;</span>
+                          <ArrowRight className="h-4 w-4 text-slate-500 hidden sm:block" />
+                          <span className="text-slate-400 sm:hidden">→</span>
                           <a
                             href={link.link_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-sm text-zinc-400 hover:text-emerald-400 truncate max-w-md"
+                            className="text-sm text-slate-400 hover:text-blue-400 truncate max-w-md"
                           >
                             {link.link_url}
                           </a>
@@ -348,7 +419,7 @@ export default function LinksPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="text-red-400 hover:bg-red-900/20 hover:text-red-300"
+                        className="text-red-400 hover:bg-red-500/10 hover:text-red-300"
                         onClick={() => handleDeleteLink(link.id)}
                       >
                         <Trash2 className="h-4 w-4" />
