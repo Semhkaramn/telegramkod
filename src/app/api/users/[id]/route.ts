@@ -23,7 +23,6 @@ export async function GET(
         username: true,
         displayName: true,
         role: true,
-        telegramId: true,
         createdAt: true,
         updatedAt: true,
         channels: {
@@ -41,7 +40,6 @@ export async function GET(
 
     return NextResponse.json({
       ...user,
-      telegramId: user.telegramId?.toString() || null,
       channels: user.channels.map((uc) => ({
         ...uc,
         channelId: uc.channelId.toString(),
@@ -75,16 +73,13 @@ export async function PATCH(
     const { id } = await params;
     const userId = parseInt(id);
     const body = await request.json();
-    const { username, password, displayName, telegramId, role } = body;
+    const { username, password, displayName, role } = body;
 
     // Güncelleme verisi hazırla
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     if (username) updateData.username = username;
     if (displayName) updateData.displayName = displayName;
     if (role) updateData.role = role;
-    if (telegramId !== undefined) {
-      updateData.telegramId = telegramId ? BigInt(telegramId) : null;
-    }
     if (password) {
       updateData.password = await hashPassword(password);
     }
@@ -97,15 +92,11 @@ export async function PATCH(
         username: true,
         displayName: true,
         role: true,
-        telegramId: true,
         updatedAt: true,
       },
     });
 
-    return NextResponse.json({
-      ...user,
-      telegramId: user.telegramId?.toString() || null,
-    });
+    return NextResponse.json(user);
   } catch (error) {
     console.error("Update user error:", error);
     return NextResponse.json({ error: "Sunucu hatası" }, { status: 500 });
