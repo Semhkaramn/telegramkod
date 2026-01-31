@@ -149,8 +149,8 @@ export default function ChannelsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_id: userId,
-          channel_id: selectedChannel.channel_id,
+          userId: userId,
+          channelId: selectedChannel.channel_id,
         }),
       });
       fetchData();
@@ -162,7 +162,7 @@ export default function ChannelsPage() {
 
   const handleRemoveUser = async (userId: number, channelId: string) => {
     try {
-      await fetch(`/api/user-channels?user_id=${userId}&channel_id=${channelId}`, {
+      await fetch(`/api/user-channels?userId=${userId}&channelId=${channelId}`, {
         method: "DELETE",
       });
       fetchData();
