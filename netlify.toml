@@ -1,9 +1,15 @@
 [build]
-  command = "npm run build"
+  command = "npx prisma generate && npx prisma db push --accept-data-loss && npx tsx prisma/seed.ts && npm run build"
   publish = ".next"
 
 [build.environment]
   NODE_VERSION = "20"
+  # DATABASE_URL environment variable should be set in Netlify dashboard
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+# Prisma binary targets for Netlify
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["@prisma/client"]
