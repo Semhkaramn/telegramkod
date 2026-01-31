@@ -18,7 +18,7 @@ export default async function DashboardLayout({
       <DashboardSidebar
         user={user}
         isImpersonating={user.isImpersonating}
-        realUser={user.isImpersonating ? user.realUser : null}
+        realUser={user.isImpersonating ? (user as any).realUser : null}
       />
       <main className="ml-64 min-h-screen p-8">
         {children}
