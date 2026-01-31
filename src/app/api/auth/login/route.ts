@@ -9,19 +9,24 @@ export async function POST(request: NextRequest) {
 
     if (!username || !password) {
       return NextResponse.json(
-        { error: "Kullanıcı adı ve şifre gerekli" },
+        { error: "Kullanici adi ve sifre gerekli" },
         { status: 400 }
       );
     }
 
-    // Kullanıcıyı bul
-    const user = await prisma.user.findUnique({
-      where: { username },
+    // Kullanıcıyı bul (case-insensitive)
+    const user = await prisma.user.findFirst({
+      where: {
+        username: {
+          equals: username,
+          mode: 'insensitive'
+        }
+      },
     });
 
     if (!user) {
       return NextResponse.json(
-        { error: "Kullanıcı adı veya şifre hatalı" },
+        { error: "Kullanici adi veya sifre hatali" },
         { status: 401 }
       );
     }
@@ -29,7 +34,7 @@ export async function POST(request: NextRequest) {
     // Kullanıcı aktif mi kontrol et
     if (!user.isActive) {
       return NextResponse.json(
-        { error: "Hesabınız devre dışı bırakılmış. Yönetici ile iletişime geçin." },
+        { error: "Hesabiniz devre disi birakilmis. Yonetici ile iletisime gecin." },
         { status: 403 }
       );
     }
@@ -38,7 +43,7 @@ export async function POST(request: NextRequest) {
     if (user.isBanned) {
       const reason = user.bannedReason ? ` Sebep: ${user.bannedReason}` : "";
       return NextResponse.json(
-        { error: `Hesabınız askıya alınmış.${reason} Yönetici ile iletişime geçin.` },
+        { error: `Hesabiniz askiya alinmis.${reason} Yonetici ile iletisime gecin.` },
         { status: 403 }
       );
     }
@@ -47,7 +52,7 @@ export async function POST(request: NextRequest) {
     const isValid = await verifyPassword(password, user.password);
     if (!isValid) {
       return NextResponse.json(
-        { error: "Kullanıcı adı veya şifre hatalı" },
+        { error: "Kullanici adi veya sifre hatali" },
         { status: 401 }
       );
     }
@@ -71,7 +76,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Login error:", error);
     return NextResponse.json(
-      { error: "Sunucu hatası" },
+      { error: "Sunucu hatasi" },
       { status: 500 }
     );
   }
