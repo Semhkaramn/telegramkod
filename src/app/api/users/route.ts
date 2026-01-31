@@ -16,7 +16,6 @@ export async function GET() {
         username: true,
         displayName: true,
         role: true,
-        telegramId: true,
         createdAt: true,
         updatedAt: true,
         _count: {
@@ -26,13 +25,7 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     });
 
-    // BigInt'leri string'e çevir
-    const serializedUsers = users.map((user) => ({
-      ...user,
-      telegramId: user.telegramId?.toString() || null,
-    }));
-
-    return NextResponse.json(serializedUsers);
+    return NextResponse.json(users);
   } catch (error) {
     console.error("Get users error:", error);
     return NextResponse.json({ error: "Sunucu hatası" }, { status: 500 });
@@ -48,7 +41,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { username, password, displayName, telegramId, role } = body;
+    const { username, password, displayName, role } = body;
 
     if (!username || !password) {
       return NextResponse.json(
@@ -77,7 +70,6 @@ export async function POST(request: NextRequest) {
         username,
         password: hashedPassword,
         displayName: displayName || username,
-        telegramId: telegramId ? BigInt(telegramId) : null,
         role: role || "user",
       },
       select: {
@@ -85,15 +77,11 @@ export async function POST(request: NextRequest) {
         username: true,
         displayName: true,
         role: true,
-        telegramId: true,
         createdAt: true,
       },
     });
 
-    return NextResponse.json({
-      ...user,
-      telegramId: user.telegramId?.toString() || null,
-    });
+    return NextResponse.json(user);
   } catch (error) {
     console.error("Create user error:", error);
     return NextResponse.json({ error: "Sunucu hatası" }, { status: 500 });
