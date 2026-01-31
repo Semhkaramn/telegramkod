@@ -226,13 +226,12 @@ def record_code_stat(channel_id: int, code: str):
             now = datetime.now(istanbul_tz)
             today = now.date()
             cursor.execute("""
-                INSERT INTO channel_stats (channel_id, stat_date, daily_count, code_list, last_updated)
-                VALUES (%s, %s, 1, %s, %s)
+                INSERT INTO channel_stats (channel_id, stat_date, daily_count, last_updated)
+                VALUES (%s, %s, 1, %s)
                 ON CONFLICT (channel_id, stat_date) DO UPDATE
                 SET daily_count = channel_stats.daily_count + 1,
-                    code_list = channel_stats.code_list || ',' || %s,
                     last_updated = %s
-            """, (channel_id, today, code, now, code, now))
+            """, (channel_id, today, now, now))
             db.commit()
     except Exception as e:
         print(f"❌ record_code_stat HATASI: {e}")
