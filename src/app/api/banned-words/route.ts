@@ -31,13 +31,13 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const word = searchParams.get("word");
+    const id = searchParams.get("id");
 
-    if (!word) {
-      return NextResponse.json({ error: "word is required" }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
 
-    await removeBannedWord(word);
+    await removeBannedWord(Number(id));
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error removing banned word:", error);
