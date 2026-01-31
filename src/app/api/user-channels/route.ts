@@ -24,6 +24,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    // Kullanıcının ban durumunu kontrol et (superadmin hariç)
+    if (session.role !== "superadmin") {
+      const currentUser = await prisma.user.findUnique({
+        where: { id: session.userId },
+        select: { isBanned: true, isActive: true }
+      });
+
+      if (currentUser?.isBanned) {
+        return NextResponse.json({ error: "Hesabınız askıya alınmış" }, { status: 403 });
+      }
+
+      if (!currentUser?.isActive) {
+        return NextResponse.json({ error: "Hesabınız devre dışı" }, { status: 403 });
+      }
+    }
+
     const userChannels = await prisma.userChannel.findMany({
       where: { userId: targetUserId },
       include: {
@@ -189,6 +205,38 @@ export async function PATCH(request: NextRequest) {
       targetUserId = parseInt(userId);
     } else if (userId && parseInt(userId) !== targetUserId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    // Normal kullanıcılar için ban ve bot kontrolü
+    if (session.role !== "superadmin") {
+      const currentUser = await prisma.user.findUnique({
+        where: { id: session.userId },
+        select: { isBanned: true, isActive: true, botEnabled: true }
+      });
+
+      // Banlı kullanıcı hiçbir işlem yapamaz
+      if (currentUser?.isBanned) {
+        return NextResponse.json(
+          { error: "Hesabınız askıya alınmış. İşlem yapamazsınız." },
+          { status: 403 }
+        );
+      }
+
+      // Pasif kullanıcı işlem yapamaz
+      if (!currentUser?.isActive) {
+        return NextResponse.json(
+          { error: "Hesabınız devre dışı. İşlem yapamazsınız." },
+          { status: 403 }
+        );
+      }
+
+      // Bot kapalıyken kanal AKTİFLEŞTİRİLEMEZ (sadece durdurulabilir)
+      if (!currentUser?.botEnabled && paused === false) {
+        return NextResponse.json(
+          { error: "Bot yönetici tarafından durdurulmuş. Kanalları aktifleştiremezsiniz." },
+          { status: 403 }
+        );
+      }
     }
 
     const userChannel = await prisma.userChannel.update({
