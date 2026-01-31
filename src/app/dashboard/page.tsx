@@ -36,6 +36,28 @@ interface UserInfo {
   isBanned: boolean;
 }
 
+// Timezone-safe tarih karşılaştırma fonksiyonları
+const getIstanbulDate = (date: Date): string => {
+  // İstanbul timezone'unda YYYY-MM-DD formatında tarih al
+  return date.toLocaleDateString('sv-SE', { timeZone: 'Europe/Istanbul' });
+};
+
+const getIstanbulToday = (): string => {
+  return getIstanbulDate(new Date());
+};
+
+const getIstanbulDateMinusDays = (days: number): string => {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return getIstanbulDate(date);
+};
+
+const normalizeStatDate = (statDate: string): string => {
+  // API'den gelen ISO tarihini YYYY-MM-DD formatına çevir
+  // Örnek: "2024-01-15T00:00:00.000Z" -> "2024-01-15"
+  return statDate.split("T")[0];
+};
+
 export default function DashboardPage() {
   const [userChannels, setUserChannels] = useState<UserChannel[]>([]);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
@@ -104,10 +126,10 @@ export default function DashboardPage() {
     }
   };
 
-  // Istatistik hesaplamalari
-  const today = new Date().toISOString().split("T")[0];
-  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-  const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  // İstatistik hesaplamalari - Timezone-safe
+  const today = getIstanbulToday();
+  const weekAgo = getIstanbulDateMinusDays(7);
+  const monthAgo = getIstanbulDateMinusDays(30);
 
   const calculateStats = () => {
     let todayTotal = 0;
@@ -116,7 +138,7 @@ export default function DashboardPage() {
 
     userChannels.forEach((uc) => {
       uc.channel.stats.forEach((stat) => {
-        const statDate = stat.statDate.split("T")[0];
+        const statDate = normalizeStatDate(stat.statDate);
         if (statDate === today) {
           todayTotal += stat.dailyCount;
         }
@@ -133,7 +155,7 @@ export default function DashboardPage() {
   };
 
   const getChannelTodayStats = (channel: Channel) => {
-    const todayStat = channel.stats.find((s) => s.statDate.split("T")[0] === today);
+    const todayStat = channel.stats.find((s) => normalizeStatDate(s.statDate) === today);
     return todayStat?.dailyCount || 0;
   };
 
