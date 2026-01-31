@@ -57,7 +57,7 @@ model Channel {
   @@map("channels")
 }
 
-// Dinleme kanalları
+// Dinleme kanalları - her zaman aktif, is_active ayarı yok
 model ListeningChannel {
   channelId   BigInt   @id @map("channel_id")
   channelName String?  @map("channel_name")
@@ -65,7 +65,6 @@ model ListeningChannel {
   keyword     String   @default("")
   type        String   @default("text")
   triggers    String   @default("")
-  isActive    Boolean  @default(false) @map("is_active")  // Varsayılan KAPALI
 
   @@map("listening_channels")
 }
