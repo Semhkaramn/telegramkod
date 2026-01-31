@@ -222,6 +222,7 @@ export async function getAllListeningChannels() {
     keyword: c.keyword,
     type: c.type,
     triggers: c.triggers,
+    is_active: c.isActive,
   }));
 }
 
@@ -234,7 +235,8 @@ export async function addListeningChannel(
   defaultLink?: string,
   keyword?: string,
   type?: string,
-  triggers?: string
+  triggers?: string,
+  isActive: boolean = false  // Varsayılan KAPALI
 ) {
   return prisma.listeningChannel.upsert({
     where: { channelId: BigInt(channelId) },
@@ -244,6 +246,7 @@ export async function addListeningChannel(
       keyword: keyword || "",
       type: type || "text",
       triggers: triggers || "",
+      isActive,
     },
     create: {
       channelId: BigInt(channelId),
@@ -252,6 +255,7 @@ export async function addListeningChannel(
       keyword: keyword || "",
       type: type || "text",
       triggers: triggers || "",
+      isActive,  // Varsayılan KAPALI
     },
   });
 }
@@ -264,6 +268,7 @@ export async function updateListeningChannel(
     keyword?: string;
     type?: string;
     triggers?: string;
+    isActive?: boolean;
   }
 ) {
   return prisma.listeningChannel.update({
