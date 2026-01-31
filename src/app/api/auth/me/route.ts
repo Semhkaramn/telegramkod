@@ -18,7 +18,6 @@ export async function GET() {
         username: user.username,
         displayName: user.displayName,
         role: user.role,
-        telegramId: user.telegramId?.toString() || null,
         isImpersonating: user.isImpersonating || false,
         realUser: (user as any).realUser || null,
       },
