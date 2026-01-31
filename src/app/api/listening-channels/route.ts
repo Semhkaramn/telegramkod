@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getListeningChannels, addListeningChannel, removeListeningChannel } from "@/lib/db";
+import { getListeningChannels, addListeningChannel, removeListeningChannel, updateListeningChannel } from "@/lib/db";
 
 export async function GET() {
   try {
@@ -42,5 +42,29 @@ export async function DELETE(request: NextRequest) {
   } catch (error) {
     console.error("Error removing listening channel:", error);
     return NextResponse.json({ error: "Failed to remove listening channel" }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { channel_id, channel_name, default_link, keyword, type, triggers } = body;
+
+    if (!channel_id) {
+      return NextResponse.json({ error: "channel_id is required" }, { status: 400 });
+    }
+
+    await updateListeningChannel(Number(channel_id), {
+      channelName: channel_name,
+      defaultLink: default_link,
+      keyword: keyword,
+      type: type,
+      triggers: triggers,
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Error updating listening channel:", error);
+    return NextResponse.json({ error: "Failed to update listening channel" }, { status: 500 });
   }
 }
