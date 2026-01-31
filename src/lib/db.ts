@@ -37,6 +37,11 @@ export async function getAllChannels() {
   return channels.map((channel) => ({
     channel_id: channel.channelId.toString(),
     channel_name: channel.channelName,
+    channel_username: channel.channelUsername,
+    channel_photo: channel.channelPhoto,
+    member_count: channel.memberCount,
+    description: channel.description,
+    last_updated: channel.lastUpdated,
     created_at: channel.createdAt,
     // Kanalın pause durumu: Tüm kullanıcılar durdurulmuşsa durdurulmuş sayılır
     // Eğer hiç kullanıcı atanmamışsa veya en az bir kullanıcı aktifse, kanal aktiftir
@@ -50,13 +55,32 @@ export async function getAllChannels() {
   }));
 }
 
-export async function addChannel(channelId: number, channelName?: string) {
+export async function addChannel(
+  channelId: number,
+  channelName?: string,
+  channelUsername?: string,
+  channelPhoto?: string,
+  memberCount?: number,
+  description?: string
+) {
   return prisma.channel.upsert({
     where: { channelId: BigInt(channelId) },
-    update: { channelName },
+    update: {
+      channelName,
+      channelUsername,
+      channelPhoto,
+      memberCount,
+      description,
+      lastUpdated: new Date(),
+    },
     create: {
       channelId: BigInt(channelId),
       channelName: channelName || null,
+      channelUsername: channelUsername || null,
+      channelPhoto: channelPhoto || null,
+      memberCount: memberCount || null,
+      description: description || null,
+      lastUpdated: new Date(),
     },
   });
 }
