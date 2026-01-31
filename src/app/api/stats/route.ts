@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 import { getTotalStats, getAllChannels, getListeningChannels, getAllAdmins } from "@/lib/db";
+import { getSession } from "@/lib/auth";
 
 export async function GET() {
   try {
+    const session = await getSession();
+    if (!session || session.role !== "superadmin") {
+      return NextResponse.json({ error: "Yetkisiz erisim" }, { status: 403 });
+    }
+
     const stats = await getTotalStats();
     const channels = await getAllChannels();
     const listeningChannels = await getListeningChannels();
