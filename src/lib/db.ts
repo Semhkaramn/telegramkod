@@ -172,7 +172,6 @@ export async function getDailyStats(channelId: string) {
 
   return {
     daily_count: stats?.dailyCount || 0,
-    code_list: stats?.codeList || "",
   };
 }
 
