@@ -15,6 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { useRouter } from "next/navigation";
 
 interface User {
   id: number;
@@ -35,6 +36,7 @@ interface User {
 }
 
 export default function UsersPage() {
+  const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -218,6 +220,27 @@ export default function UsersPage() {
     setSelectedUser(user);
     setBanReason("");
     setBanDialogOpen(true);
+  };
+
+  const handleImpersonate = async (user: User) => {
+    try {
+      const res = await fetch("/api/impersonate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetUserId: user.id }),
+      });
+
+      if (res.ok) {
+        router.push("/dashboard");
+        router.refresh();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Panele giriş yapılamadı");
+      }
+    } catch (error) {
+      console.error("Error impersonating user:", error);
+      alert("Bir hata oluştu");
+    }
   };
 
   if (loading) {
@@ -473,6 +496,23 @@ export default function UsersPage() {
                         </Button>
                       )}
 
+                      {/* Paneline Gir - Sadece normal kullanıcılar için */}
+                      {user.role !== "superadmin" && !user.isBanned && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleImpersonate(user)}
+                          className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                          title="Paneline Gir"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                            <polyline points="10 17 15 12 10 7" />
+                            <line x1="15" y1="12" x2="3" y2="12" />
+                          </svg>
+                        </Button>
+                      )}
+
                       {/* Edit */}
                       <Button
                         size="sm"
@@ -545,10 +585,11 @@ export default function UsersPage() {
           <CardTitle className="text-zinc-100 text-lg">Bilgi</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-zinc-400">
-          <p><strong className="text-zinc-200">Bot Switch:</strong> Kullanıcının botunu ac/kapat. Kapalıyken kullanıcının kanallarına kod gonderilmez.</p>
-          <p><strong className="text-zinc-200">Pasif Yap:</strong> Kullanıcı giris yapabilir ama bot calısmaz.</p>
-          <p><strong className="text-zinc-200">Banla:</strong> Kullanıcı giris yapamaz ve bot calısmaz. Tum kanallar otomatik durdurulur.</p>
-          <p><strong className="text-zinc-200">Not:</strong> Yeni kullanıcı olusturulduğunda bot varsayılan olarak KAPALI baslar. Manuel olarak acmanız gerekir.</p>
+          <p><strong className="text-zinc-200">Paneline Gir:</strong> Kullanıcının panelini görüntüleyebilirsiniz. Kullanıcı gibi işlem yapabilirsiniz.</p>
+          <p><strong className="text-zinc-200">Bot Switch:</strong> Kullanıcının botunu aç/kapat. Kapalıyken kullanıcının kanallarına kod gönderilmez.</p>
+          <p><strong className="text-zinc-200">Pasif Yap:</strong> Kullanıcı giriş yapabilir ama bot çalışmaz.</p>
+          <p><strong className="text-zinc-200">Banla:</strong> Kullanıcı giriş yapamaz ve bot çalışmaz. Tüm kanallar otomatik durdurulur.</p>
+          <p><strong className="text-zinc-200">Not:</strong> Yeni kullanıcı oluşturulduğunda bot varsayılan olarak KAPALI başlar. Manuel olarak açmanız gerekir.</p>
         </CardContent>
       </Card>
     </div>
