@@ -15,8 +15,11 @@ export async function PATCH(
     const { id } = await params;
     const userId = parseInt(id);
 
+    // Impersonation durumunda kullanıcı kendi şifresini değiştirebilir
+    const effectiveUserId = session.impersonatingUserId || session.userId;
+
     // Users can only change their own password, superadmin can change anyone's
-    if (session.userId !== userId && session.role !== "superadmin") {
+    if (effectiveUserId !== userId && session.role !== "superadmin") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
