@@ -26,6 +26,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Kullanıcı aktif mi kontrol et
+    if (!user.isActive) {
+      return NextResponse.json(
+        { error: "Hesabınız devre dışı bırakılmış. Yönetici ile iletişime geçin." },
+        { status: 403 }
+      );
+    }
+
+    // Kullanıcı banlı mı kontrol et
+    if (user.isBanned) {
+      const reason = user.bannedReason ? ` Sebep: ${user.bannedReason}` : "";
+      return NextResponse.json(
+        { error: `Hesabınız askıya alınmış.${reason} Yönetici ile iletişime geçin.` },
+        { status: 403 }
+      );
+    }
+
     // Şifre kontrolü
     const isValid = await verifyPassword(password, user.password);
     if (!isValid) {
