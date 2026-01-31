@@ -210,14 +210,8 @@ def get_custom_link(user_id: int, channel_id: int, code: str, original_link: str
         if conn:
             release_db_connection(conn)
 
-def get_link_for_channel(channel_id: int, code: str, original_link: str) -> str:
-    """Kanal için uygun linki al - önce özel link, yoksa orijinal"""
-    user_id = get_channel_user_id(channel_id)
-    if user_id:
-        custom_link = get_custom_link(user_id, channel_id, code, original_link)
-        if custom_link:
-            return custom_link
-    return original_link
+# NOT: get_link_for_channel artık cache'li versiyon kullanıyor (get_link_for_channel_cached)
+# Eski DB sorgulu fonksiyonlar (get_channel_user_id, get_custom_link) artık kullanılmıyor
 
 # —————— KOD KONTROLÜ (RACE CONDITION DÜZELTİLDİ) ——————
 def is_code_recently_sent(code: str) -> bool:
@@ -429,7 +423,7 @@ def normalize_channel_id(channel_id: int) -> int:
 async def send_to_single_channel(channel_id: int, code: str, original_link: str) -> dict:
     """Tek kanala kod gönder (paralel gönderim için)"""
     try:
-        final_link = get_link_for_channel(channel_id, code, original_link)
+        final_link = get_link_for_channel_cached(channel_id, code, original_link)
         message = f"`{code}`\n\n{final_link}"
 
         result = await send_message_via_bot(channel_id, message)
@@ -572,6 +566,8 @@ listening_channels_cache = []
 keywords_cache = []
 banned_words_cache = []
 active_channels_cache = []
+channel_user_map_cache = {}  # {channel_id: user_id} - Kanal -> Kullanıcı eşlemesi
+admin_links_cache = []  # [(user_id, channel_id, link_code, link_url), ...] - Özel linkler
 
 # Cache kontrol değişkenleri
 cache_version_local = 0
@@ -595,15 +591,61 @@ def get_db_cache_version():
         if conn:
             release_db_connection(conn)
 
+def get_channel_user_map():
+    """Tüm kanal-kullanıcı eşlemelerini al"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT uc.channel_id, uc.user_id FROM user_channels uc
+            INNER JOIN users u ON uc.user_id = u.id
+            WHERE uc.paused = false
+              AND u.is_banned = false
+              AND u.is_active = true
+              AND u.bot_enabled = true
+        """)
+        result = {row[0]: row[1] for row in cursor.fetchall()}
+        return result
+    except Exception as e:
+        print(f"❌ get_channel_user_map HATASI: {e}")
+        return {}
+    finally:
+        if conn:
+            release_db_connection(conn)
+
+def get_all_admin_links():
+    """Tüm admin linklerini al"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT user_id, channel_id, link_code, link_url
+            FROM admin_links
+            ORDER BY LENGTH(link_code) DESC
+        """)
+        result = cursor.fetchall()
+        return result
+    except Exception as e:
+        print(f"❌ get_all_admin_links HATASI: {e}")
+        return []
+    finally:
+        if conn:
+            release_db_connection(conn)
+
 def refresh_all_caches():
     """Tüm cache'leri yenile"""
     global listening_channels_cache, keywords_cache, banned_words_cache, active_channels_cache
+    global channel_user_map_cache, admin_links_cache
     print("🔄 Tüm cache'ler yenileniyor...")
     listening_channels_cache = get_listening_channels()
     keywords_cache = get_all_keywords()
     banned_words_cache = get_all_banned_words()
     active_channels_cache = get_active_channels()
-    print(f"✅ Cache yenilendi: {len(listening_channels_cache)} dinleme, {len(keywords_cache)} keyword, {len(banned_words_cache)} banned, {len(active_channels_cache)} aktif kanal")
+    channel_user_map_cache = get_channel_user_map()
+    admin_links_cache = get_all_admin_links()
+    print(f"✅ Cache yenilendi: {len(listening_channels_cache)} dinleme, {len(keywords_cache)} keyword, {len(banned_words_cache)} banned, {len(active_channels_cache)} aktif kanal, {len(channel_user_map_cache)} kanal-user, {len(admin_links_cache)} admin link")
 
 def check_and_refresh_cache():
     """Cache version kontrolü yap, değiştiyse yenile"""
@@ -649,6 +691,33 @@ def get_active_channels_cached():
     if not active_channels_cache:
         refresh_all_caches()
     return active_channels_cache
+
+def get_channel_user_id_cached(channel_id: int):
+    """Kanalın aktif kullanıcısını cache'den al"""
+    check_and_refresh_cache()
+    return channel_user_map_cache.get(channel_id)
+
+def get_custom_link_cached(user_id: int, channel_id: int, code: str, original_link: str) -> str:
+    """Kullanıcının özel linkini cache'den al"""
+    check_and_refresh_cache()
+    code_lower = code.lower()
+    link_lower = original_link.lower()
+
+    for link_user_id, link_channel_id, link_code, link_url in admin_links_cache:
+        if link_user_id == user_id and link_channel_id == channel_id:
+            link_code_lower = link_code.lower()
+            if link_code_lower in code_lower or link_code_lower in link_lower:
+                return link_url
+    return None
+
+def get_link_for_channel_cached(channel_id: int, code: str, original_link: str) -> str:
+    """Kanal için uygun linki cache'den al - önce özel link, yoksa orijinal"""
+    user_id = get_channel_user_id_cached(channel_id)
+    if user_id:
+        custom_link = get_custom_link_cached(user_id, channel_id, code, original_link)
+        if custom_link:
+            return custom_link
+    return original_link
 
 # —————— ANA DİNLEYİCİ ——————
 @client.on(events.NewMessage())
