@@ -92,7 +92,7 @@ export default function ViewUserPage() {
       const response = await fetch("/api/impersonate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: parseInt(userId) }),
+        body: JSON.stringify({ targetUserId: parseInt(userId) }),
       });
 
       if (response.ok) {
