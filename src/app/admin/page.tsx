@@ -45,15 +45,15 @@ export default function AdminDashboard() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <Skeleton className="h-8 w-48 bg-zinc-800" />
+        <Skeleton className="h-8 w-48 bg-slate-800" />
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} className="h-32 bg-zinc-800" />
+            <Skeleton key={i} className="h-32 bg-slate-800" />
           ))}
         </div>
         <div className="grid gap-4 md:grid-cols-2">
-          <Skeleton className="h-64 bg-zinc-800" />
-          <Skeleton className="h-64 bg-zinc-800" />
+          <Skeleton className="h-64 bg-slate-800" />
+          <Skeleton className="h-64 bg-slate-800" />
         </div>
       </div>
     );
@@ -62,52 +62,52 @@ export default function AdminDashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-100">Dashboard</h1>
-        <p className="text-zinc-400">Sistem genel gorunumu</p>
+        <h1 className="text-2xl font-bold text-slate-100">Dashboard</h1>
+        <p className="text-slate-400">Sistem genel görünümü</p>
       </div>
 
       {/* Stats Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="bg-slate-900/50 border-slate-700/50 backdrop-blur-sm">
           <CardHeader className="pb-2">
-            <CardDescription className="text-zinc-400">Kullanıcılar</CardDescription>
-            <CardTitle className="text-3xl text-zinc-100">{stats?.users || 0}</CardTitle>
+            <CardDescription className="text-slate-400">Kullanıcılar</CardDescription>
+            <CardTitle className="text-3xl text-slate-100">{stats?.users || 0}</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-zinc-500">Toplam kayıtlı kullanıcı</p>
+            <p className="text-sm text-slate-500">Toplam kayıtlı kullanıcı</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="bg-slate-900/50 border-slate-700/50 backdrop-blur-sm">
           <CardHeader className="pb-2">
-            <CardDescription className="text-zinc-400">Kanallar</CardDescription>
-            <CardTitle className="text-3xl text-zinc-100">{stats?.channels.total || 0}</CardTitle>
+            <CardDescription className="text-slate-400">Kanallar</CardDescription>
+            <CardTitle className="text-3xl text-slate-100">{stats?.channels.total || 0}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex gap-3 text-sm">
-              <span className="text-emerald-400">{stats?.channels.active || 0} Aktif</span>
+              <span className="text-blue-400">{stats?.channels.active || 0} Aktif</span>
               <span className="text-amber-400">{stats?.channels.paused || 0} Durduruldu</span>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="bg-slate-900/50 border-slate-700/50 backdrop-blur-sm">
           <CardHeader className="pb-2">
-            <CardDescription className="text-zinc-400">Dinleme Kanalları</CardDescription>
-            <CardTitle className="text-3xl text-zinc-100">{stats?.listeningChannels || 0}</CardTitle>
+            <CardDescription className="text-slate-400">Dinleme Kanalları</CardDescription>
+            <CardTitle className="text-3xl text-slate-100">{stats?.listeningChannels || 0}</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-zinc-500">Kaynak kanallar</p>
+            <p className="text-sm text-slate-500">Kaynak kanallar</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="bg-slate-900/50 border-slate-700/50 backdrop-blur-sm">
           <CardHeader className="pb-2">
-            <CardDescription className="text-zinc-400">Bugun Gonderilen</CardDescription>
-            <CardTitle className="text-3xl text-zinc-100">{stats?.codes.daily || 0}</CardTitle>
+            <CardDescription className="text-slate-400">Bugün Gönderilen</CardDescription>
+            <CardTitle className="text-3xl text-slate-100">{stats?.codes.daily || 0}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-sm text-zinc-500">
+            <div className="text-sm text-slate-500">
               <span>Hafta: {stats?.codes.weekly || 0}</span>
               <span className="mx-2">|</span>
               <span>Ay: {stats?.codes.monthly || 0}</span>
@@ -118,18 +118,18 @@ export default function AdminDashboard() {
 
       {/* Quick Actions */}
       <div className="grid gap-4 md:grid-cols-2">
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="bg-slate-900/50 border-slate-700/50 backdrop-blur-sm">
           <CardHeader>
-            <CardTitle className="text-zinc-100">Hızlı Islemler</CardTitle>
-            <CardDescription className="text-zinc-400">Sık kullanılan islemler</CardDescription>
+            <CardTitle className="text-slate-100">Hızlı İşlemler</CardTitle>
+            <CardDescription className="text-slate-400">Sık kullanılan işlemler</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
             <a
               href="/admin/users"
-              className="flex items-center gap-3 p-3 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 transition-colors group"
+              className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors group border border-slate-700/50"
             >
-              <div className="w-10 h-10 rounded-lg bg-zinc-700 flex items-center justify-center group-hover:bg-zinc-600 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-300">
+              <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center group-hover:bg-blue-500/30 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400">
                   <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
                   <circle cx="9" cy="7" r="4" />
                   <line x1="19" x2="19" y1="8" y2="14" />
@@ -137,69 +137,69 @@ export default function AdminDashboard() {
                 </svg>
               </div>
               <div>
-                <p className="font-medium text-zinc-100">Yeni Kullanıcı Ekle</p>
-                <p className="text-sm text-zinc-500">Sisteme yeni kullanıcı ekle</p>
+                <p className="font-medium text-slate-100">Yeni Kullanıcı Ekle</p>
+                <p className="text-sm text-slate-500">Sisteme yeni kullanıcı ekle</p>
               </div>
             </a>
             <a
               href="/admin/channels"
-              className="flex items-center gap-3 p-3 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 transition-colors group"
+              className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors group border border-slate-700/50"
             >
-              <div className="w-10 h-10 rounded-lg bg-zinc-700 flex items-center justify-center group-hover:bg-zinc-600 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-300">
+              <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center group-hover:bg-blue-500/30 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400">
                   <path d="m22 2-7 20-4-9-9-4Z" />
                   <path d="M22 2 11 13" />
                 </svg>
               </div>
               <div>
-                <p className="font-medium text-zinc-100">Kanal Yonetimi</p>
-                <p className="text-sm text-zinc-500">Hedef kanalları yonet</p>
+                <p className="font-medium text-slate-100">Kanal Yönetimi</p>
+                <p className="text-sm text-slate-500">Hedef kanalları yönet</p>
               </div>
             </a>
             <a
               href="/admin/listening"
-              className="flex items-center gap-3 p-3 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 transition-colors group"
+              className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors group border border-slate-700/50"
             >
-              <div className="w-10 h-10 rounded-lg bg-zinc-700 flex items-center justify-center group-hover:bg-zinc-600 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-300">
+              <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center group-hover:bg-blue-500/30 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400">
                   <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
                   <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
                 </svg>
               </div>
               <div>
-                <p className="font-medium text-zinc-100">Dinleme Kanalları</p>
-                <p className="text-sm text-zinc-500">Kod kaynaklarını yonet</p>
+                <p className="font-medium text-slate-100">Dinleme Kanalları</p>
+                <p className="text-sm text-slate-500">Kod kaynaklarını yönet</p>
               </div>
             </a>
           </CardContent>
         </Card>
 
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="bg-slate-900/50 border-slate-700/50 backdrop-blur-sm">
           <CardHeader>
-            <CardTitle className="text-zinc-100">Sistem Durumu</CardTitle>
-            <CardDescription className="text-zinc-400">Bot ve sistem bilgileri</CardDescription>
+            <CardTitle className="text-slate-100">Sistem Durumu</CardTitle>
+            <CardDescription className="text-slate-400">Bot ve sistem bilgileri</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/50">
+            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
               <div className="flex items-center gap-3">
-                <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-zinc-300">Bot Durumu</span>
+                <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse" />
+                <span className="text-slate-300">Bot Durumu</span>
               </div>
-              <span className="text-emerald-400 font-medium">Aktif</span>
+              <span className="text-blue-400 font-medium">Aktif</span>
             </div>
-            <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/50">
+            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
               <div className="flex items-center gap-3">
-                <div className="w-3 h-3 rounded-full bg-emerald-500" />
-                <span className="text-zinc-300">Veritabanı</span>
+                <div className="w-3 h-3 rounded-full bg-blue-500" />
+                <span className="text-slate-300">Veritabanı</span>
               </div>
-              <span className="text-emerald-400 font-medium">Baglı</span>
+              <span className="text-blue-400 font-medium">Bağlı</span>
             </div>
-            <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/50">
+            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
               <div className="flex items-center gap-3">
-                <div className="w-3 h-3 rounded-full bg-zinc-500" />
-                <span className="text-zinc-300">Son Guncelleme</span>
+                <div className="w-3 h-3 rounded-full bg-slate-500" />
+                <span className="text-slate-300">Son Güncelleme</span>
               </div>
-              <span className="text-zinc-400 text-sm">{new Date().toLocaleString("tr-TR")}</span>
+              <span className="text-slate-400 text-sm">{new Date().toLocaleString("tr-TR")}</span>
             </div>
           </CardContent>
         </Card>
