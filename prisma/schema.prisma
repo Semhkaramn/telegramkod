@@ -148,3 +148,12 @@ model BotLog {
 
   @@map("bot_logs")
 }
+
+// Cache versiyon kontrolü - website değişiklik yapınca version artar, bot kontrol eder
+model CacheVersion {
+  id        Int      @id @default(1)
+  version   Int      @default(1)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("cache_version")
+}
