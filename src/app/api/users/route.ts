@@ -16,6 +16,11 @@ export async function GET() {
         username: true,
         displayName: true,
         role: true,
+        isActive: true,
+        isBanned: true,
+        bannedAt: true,
+        bannedReason: true,
+        botEnabled: true,
         createdAt: true,
         updatedAt: true,
         _count: {
@@ -71,12 +76,18 @@ export async function POST(request: NextRequest) {
         password: hashedPassword,
         displayName: displayName || username,
         role: role || "user",
+        isActive: true,      // Yeni kullanıcı aktif
+        isBanned: false,     // Yeni kullanıcı banlı değil
+        botEnabled: false,   // Bot varsayılan KAPALI - süper admin açmalı
       },
       select: {
         id: true,
         username: true,
         displayName: true,
         role: true,
+        isActive: true,
+        isBanned: true,
+        botEnabled: true,
         createdAt: true,
       },
     });
