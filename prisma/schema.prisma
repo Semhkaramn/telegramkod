@@ -46,11 +46,16 @@ model UserChannel {
 
 // Kanallar (hedef kanallar)
 model Channel {
-  channelId   BigInt   @id @map("channel_id")
-  channelName String?  @map("channel_name")
-  isJoined    Boolean  @default(false) @map("is_joined")  // Bot bu kanala katıldı mı?
-  joinError   String?  @map("join_error")                  // Katılım hatası varsa
-  createdAt   DateTime @default(now()) @map("created_at")
+  channelId       BigInt   @id @map("channel_id")
+  channelName     String?  @map("channel_name")
+  channelUsername String?  @map("channel_username")   // @username
+  channelPhoto    String?  @map("channel_photo")      // Kanal fotoğrafı URL
+  memberCount     Int?     @map("member_count")       // Üye sayısı
+  description     String?  @map("description")        // Kanal açıklaması
+  isJoined        Boolean  @default(false) @map("is_joined")  // Bot bu kanala katıldı mı?
+  joinError       String?  @map("join_error")                  // Katılım hatası varsa
+  lastUpdated     DateTime @default(now()) @map("last_updated") // Son güncelleme tarihi
+  createdAt       DateTime @default(now()) @map("created_at")
 
   userChannels UserChannel[]
   stats        ChannelStats[]
