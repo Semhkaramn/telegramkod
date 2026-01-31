@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     const channelId = searchParams.get("channel_id");
 
     if (channelId) {
-      const admins = await getChannelAdmins(Number(channelId));
+      const admins = await getChannelAdmins(channelId);
       return NextResponse.json(admins);
     }
 
