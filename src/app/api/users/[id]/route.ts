@@ -23,6 +23,11 @@ export async function GET(
         username: true,
         displayName: true,
         role: true,
+        isActive: true,
+        isBanned: true,
+        bannedAt: true,
+        bannedReason: true,
+        botEnabled: true,
         createdAt: true,
         updatedAt: true,
         channels: {
@@ -73,13 +78,40 @@ export async function PATCH(
     const { id } = await params;
     const userId = parseInt(id);
     const body = await request.json();
-    const { username, password, displayName, role } = body;
+    const {
+      username,
+      password,
+      displayName,
+      role,
+      isActive,
+      isBanned,
+      bannedReason,
+      botEnabled
+    } = body;
 
     // Güncelleme verisi hazırla
     const updateData: Record<string, unknown> = {};
-    if (username) updateData.username = username;
-    if (displayName) updateData.displayName = displayName;
-    if (role) updateData.role = role;
+
+    if (username !== undefined) updateData.username = username;
+    if (displayName !== undefined) updateData.displayName = displayName;
+    if (role !== undefined) updateData.role = role;
+    if (isActive !== undefined) updateData.isActive = isActive;
+    if (botEnabled !== undefined) updateData.botEnabled = botEnabled;
+
+    // Ban işlemi
+    if (isBanned !== undefined) {
+      updateData.isBanned = isBanned;
+      if (isBanned) {
+        updateData.bannedAt = new Date();
+        updateData.bannedReason = bannedReason || null;
+        // Banlanan kullanıcının bot'unu da kapat
+        updateData.botEnabled = false;
+      } else {
+        updateData.bannedAt = null;
+        updateData.bannedReason = null;
+      }
+    }
+
     if (password) {
       updateData.password = await hashPassword(password);
     }
@@ -92,9 +124,22 @@ export async function PATCH(
         username: true,
         displayName: true,
         role: true,
+        isActive: true,
+        isBanned: true,
+        bannedAt: true,
+        bannedReason: true,
+        botEnabled: true,
         updatedAt: true,
       },
     });
+
+    // Eğer kullanıcı banlandıysa veya devre dışı bırakıldıysa, tüm kanallarını durdur
+    if (isBanned === true || isActive === false) {
+      await prisma.userChannel.updateMany({
+        where: { userId },
+        data: { paused: true },
+      });
+    }
 
     return NextResponse.json(user);
   } catch (error) {
