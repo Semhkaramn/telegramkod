@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -18,10 +17,6 @@ import {
 interface ListeningChannel {
   channel_id: string;
   channel_name: string | null;
-  default_link: string;
-  keyword: string;
-  type: string;
-  triggers: string;
 }
 
 export default function ListeningChannelsPage() {
@@ -32,10 +27,6 @@ export default function ListeningChannelsPage() {
   const [formData, setFormData] = useState({
     channel_id: "",
     channel_name: "",
-    default_link: "",
-    keyword: "",
-    type: "text",
-    triggers: "",
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -70,10 +61,6 @@ export default function ListeningChannelsPage() {
         body: JSON.stringify({
           channel_id: formData.channel_id,
           channel_name: formData.channel_name || null,
-          default_link: formData.default_link || "https://example.com",
-          keyword: formData.keyword,
-          type: formData.type,
-          triggers: formData.triggers,
         }),
       });
 
@@ -89,10 +76,6 @@ export default function ListeningChannelsPage() {
       setFormData({
         channel_id: "",
         channel_name: "",
-        default_link: "",
-        keyword: "",
-        type: "text",
-        triggers: "",
       });
       fetchChannels();
     } catch (error) {
@@ -107,10 +90,6 @@ export default function ListeningChannelsPage() {
     setFormData({
       channel_id: channel.channel_id,
       channel_name: channel.channel_name || "",
-      default_link: channel.default_link,
-      keyword: channel.keyword,
-      type: channel.type,
-      triggers: channel.triggers,
     });
     setDialogOpen(true);
   };
@@ -135,10 +114,6 @@ export default function ListeningChannelsPage() {
     setFormData({
       channel_id: "",
       channel_name: "",
-      default_link: "",
-      keyword: "",
-      type: "text",
-      triggers: "",
     });
     setError("");
     setDialogOpen(true);
@@ -189,69 +164,27 @@ export default function ListeningChannelsPage() {
                   {error}
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-zinc-300">Kanal ID</label>
-                  <Input
-                    value={formData.channel_id}
-                    onChange={(e) => setFormData({ ...formData, channel_id: e.target.value })}
-                    className="bg-zinc-800 border-zinc-700 text-zinc-100"
-                    placeholder="-1001234567890"
-                    required
-                    disabled={!!editingChannel}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-zinc-300">Kanal Adı</label>
-                  <Input
-                    value={formData.channel_name}
-                    onChange={(e) => setFormData({ ...formData, channel_name: e.target.value })}
-                    className="bg-zinc-800 border-zinc-700 text-zinc-100"
-                    placeholder="Kaynak Kanal"
-                  />
-                </div>
-              </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300">Varsayılan Link</label>
+                <label className="text-sm font-medium text-zinc-300">Kanal ID</label>
                 <Input
-                  value={formData.default_link}
-                  onChange={(e) => setFormData({ ...formData, default_link: e.target.value })}
+                  value={formData.channel_id}
+                  onChange={(e) => setFormData({ ...formData, channel_id: e.target.value })}
                   className="bg-zinc-800 border-zinc-700 text-zinc-100"
-                  placeholder="https://example.com"
+                  placeholder="-1001234567890"
+                  required
+                  disabled={!!editingChannel}
                 />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-zinc-300">Anahtar Kelime</label>
-                  <Input
-                    value={formData.keyword}
-                    onChange={(e) => setFormData({ ...formData, keyword: e.target.value })}
-                    className="bg-zinc-800 border-zinc-700 text-zinc-100"
-                    placeholder="bonus"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-zinc-300">Tip</label>
-                  <select
-                    value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                    className="w-full h-10 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 px-3"
-                  >
-                    <option value="text">Metin</option>
-                    <option value="image">Gorsel</option>
-                    <option value="both">Her Ikisi</option>
-                  </select>
-                </div>
+                <p className="text-xs text-zinc-500">Telegram kanal ID'si (ör: -1001234567890)</p>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300">Tetikleyiciler</label>
-                <Textarea
-                  value={formData.triggers}
-                  onChange={(e) => setFormData({ ...formData, triggers: e.target.value })}
-                  className="bg-zinc-800 border-zinc-700 text-zinc-100 min-h-[80px]"
-                  placeholder="Virgülle ayrılmıs tetikleyici kelimeler"
+                <label className="text-sm font-medium text-zinc-300">Kanal Adı</label>
+                <Input
+                  value={formData.channel_name}
+                  onChange={(e) => setFormData({ ...formData, channel_name: e.target.value })}
+                  className="bg-zinc-800 border-zinc-700 text-zinc-100"
+                  placeholder="Kaynak Kanal"
                 />
-                <p className="text-xs text-zinc-500">Virgülle ayrılmıs tetikleyici kelimeler</p>
+                <p className="text-xs text-zinc-500">Kanalı tanımlamak için bir isim (isteğe bağlı)</p>
               </div>
               <div className="flex gap-3 pt-4">
                 <Button
@@ -331,30 +264,6 @@ export default function ListeningChannelsPage() {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <p className="text-zinc-500">Varsayılan Link</p>
-                    <p className="text-zinc-300 truncate" title={channel.default_link}>
-                      {channel.default_link}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-zinc-500">Anahtar Kelime</p>
-                    <p className="text-zinc-300">{channel.keyword || "-"}</p>
-                  </div>
-                  <div>
-                    <p className="text-zinc-500">Tip</p>
-                    <p className="text-zinc-300 capitalize">{channel.type}</p>
-                  </div>
-                  <div>
-                    <p className="text-zinc-500">Tetikleyiciler</p>
-                    <p className="text-zinc-300 truncate" title={channel.triggers}>
-                      {channel.triggers || "-"}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
             </Card>
           ))
         )}
