@@ -1,0 +1,39 @@
+{
+  "name": "Telegram Kod Botu",
+  "description": "Telegram kanal kod dağıtım botu",
+  "repository": "https://github.com/Semhkaramn/telegramkod",
+  "keywords": ["telegram", "bot", "python"],
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "eco"
+    }
+  },
+  "env": {
+    "API_ID": {
+      "description": "Telegram API ID (my.telegram.org'dan alın)",
+      "required": true
+    },
+    "API_HASH": {
+      "description": "Telegram API Hash (my.telegram.org'dan alın)",
+      "required": true
+    },
+    "DATABASE_URL": {
+      "description": "PostgreSQL Database URL (Neon.tech veya Heroku Postgres)",
+      "required": true
+    },
+    "SESSION_STRING": {
+      "description": "Telethon Session String (dinleme hesabı için)",
+      "required": true
+    },
+    "BOT_TOKEN": {
+      "description": "Telegram Bot Token (@BotFather'dan alın)",
+      "required": true
+    }
+  },
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ]
+}
