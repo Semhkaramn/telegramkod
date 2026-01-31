@@ -33,6 +33,7 @@ export async function middleware(request: NextRequest) {
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET);
     const role = payload.role as string;
+    const userId = payload.userId as number;
 
     // Admin routes - only superadmin
     if (pathname.startsWith("/admin")) {
@@ -43,7 +44,9 @@ export async function middleware(request: NextRequest) {
 
     // Dashboard routes - any authenticated user
     if (pathname.startsWith("/dashboard")) {
-      // All authenticated users can access dashboard
+      // Kullanıcının ban ve aktiflik durumu API seviyesinde kontrol ediliyor
+      // Middleware'de sadece token geçerliliği kontrol edilir
+      // Eğer kullanıcı banlıysa, API çağrılarında 403 dönecek
     }
 
     // Root path - redirect based on role
