@@ -234,7 +234,7 @@ def is_code_recently_sent(code: str) -> bool:
             release_db_connection(conn)
 
 def mark_code_as_sent(code: str) -> bool:
-    """Kodu gönderildi olarak işaretle - Race condition için SERIALIZABLE isolation kullan"""
+    """Kodu gönderildi olarak işaretle - Race condition korumalı"""
     conn = None
     try:
         conn = get_db_connection()
@@ -243,29 +243,28 @@ def mark_code_as_sent(code: str) -> bool:
         cursor = conn.cursor()
 
         try:
-            # Tek sorguda kontrol ve insert - atomik işlem
+            # Önce kontrol et - son 1 saat içinde gönderilmiş mi?
+            cursor.execute("""
+                SELECT 1 FROM sent_codes
+                WHERE code = %s
+                AND sent_at > (NOW() AT TIME ZONE 'Europe/Istanbul') - INTERVAL '1 hour'
+            """, (code,))
+
+            if cursor.fetchone():
+                # Kod zaten son 1 saat içinde gönderilmiş - tekrar gönderme
+                conn.commit()
+                return False
+
+            # Kod yeni veya 1 saatten eski - ekle/güncelle
             cursor.execute("""
                 INSERT INTO sent_codes (code, sent_at)
-                SELECT %s, NOW() AT TIME ZONE 'Europe/Istanbul'
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM sent_codes
-                    WHERE code = %s
-                    AND sent_at > (NOW() AT TIME ZONE 'Europe/Istanbul') - INTERVAL '1 hour'
-                )
+                VALUES (%s, NOW() AT TIME ZONE 'Europe/Istanbul')
                 ON CONFLICT (code) DO UPDATE
-                SET sent_at = CASE
-                    WHEN sent_codes.sent_at <= (NOW() AT TIME ZONE 'Europe/Istanbul') - INTERVAL '1 hour'
-                    THEN NOW() AT TIME ZONE 'Europe/Istanbul'
-                    ELSE sent_codes.sent_at
-                END
-                RETURNING code
-            """, (code, code))
+                SET sent_at = NOW() AT TIME ZONE 'Europe/Istanbul'
+            """, (code,))
 
-            result = cursor.fetchone()
             conn.commit()
-
-            # Eğer sonuç varsa, yeni kayıt eklendi veya güncellendi
-            return result is not None
+            return True
 
         except psycopg2.Error as e:
             conn.rollback()
@@ -380,7 +379,7 @@ else:
     client = TelegramClient('bot_session', api_id, api_hash)
 
 # —————— HTTP CLIENT ——————
-http_client = httpx.AsyncClient(timeout=30.0)
+http_client = httpx.AsyncClient(timeout=10.0)  # 10 saniye yeterli
 
 # —————— TELEGRAM BOT API ——————
 async def send_message_via_bot(chat_id: int, text: str) -> dict:
