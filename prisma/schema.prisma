@@ -63,14 +63,10 @@ model Channel {
   @@map("channels")
 }
 
-// Dinleme kanalları - her zaman aktif, is_active ayarı yok
+// Dinleme kanalları - sadece channel_id ve channel_name
 model ListeningChannel {
   channelId   BigInt   @id @map("channel_id")
   channelName String?  @map("channel_name")
-  defaultLink String   @default("https://example.com") @map("default_link")
-  keyword     String   @default("")
-  type        String   @default("text")
-  triggers    String   @default("")
 
   @@map("listening_channels")
 }
