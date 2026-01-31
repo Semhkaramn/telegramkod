@@ -4,14 +4,21 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
+  // Çevre değişkenlerinden veya varsayılan değerler
+  const adminUsername = process.env.SUPER_ADMIN_USERNAME || "Semhkaramn";
+  const adminPassword = process.env.SUPER_ADMIN_PASSWORD || "Abuzittin74.";
+
   // Süper admin hesabı oluştur
-  const hashedPassword = await bcrypt.hash("admin123", 12);
+  const hashedPassword = await bcrypt.hash(adminPassword, 12);
 
   const superAdmin = await prisma.user.upsert({
-    where: { username: "admin" },
-    update: {},
+    where: { username: adminUsername },
+    update: {
+      password: hashedPassword,
+      role: "superadmin",
+    },
     create: {
-      username: "admin",
+      username: adminUsername,
       password: hashedPassword,
       displayName: "Super Admin",
       role: "superadmin",
@@ -29,7 +36,7 @@ async function main() {
       create: { keyword },
     });
   }
-  console.log("✅ Anahtar kelimeler eklendi");
+  console.log("✅ Anahtar kelimeler eklendi:", keywords.join(", "));
 
   // Örnek yasak kelimeler
   const bannedWords = ["test", "deneme"];
@@ -40,12 +47,16 @@ async function main() {
       create: { word },
     });
   }
-  console.log("✅ Yasak kelimeler eklendi");
+  console.log("✅ Yasak kelimeler eklendi:", bannedWords.join(", "));
+
+  console.log("\n📋 Kurulum tamamlandı!");
+  console.log(`   Giriş: ${adminUsername}`);
+  console.log(`   Şifre: ${adminPassword}`);
 }
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error("❌ Seed hatası:", e);
     process.exit(1);
   })
   .finally(async () => {
