@@ -86,10 +86,10 @@ export default function DashboardPage() {
       <div className="space-y-6">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-32 bg-zinc-800" />
+            <Skeleton key={i} className="h-32 bg-slate-800" />
           ))}
         </div>
-        <Skeleton className="h-64 bg-zinc-800" />
+        <Skeleton className="h-64 bg-slate-800" />
       </div>
     );
   }
@@ -98,77 +98,77 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-zinc-400">Hoş geldiniz! İşte genel bakış.</p>
+        <p className="text-slate-400">Hoş geldiniz! İşte genel bakış.</p>
       </div>
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-zinc-800 bg-zinc-900">
+        <Card className="border-slate-700/50 bg-slate-900/50 backdrop-blur-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-400">
+            <CardTitle className="text-sm font-medium text-slate-400">
               Toplam Kanal
             </CardTitle>
-            <Radio className="h-4 w-4 text-emerald-500" />
+            <Radio className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-white">{userChannels.length}</div>
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-slate-500">
               {activeChannels} aktif, {pausedChannels} durdurulmuş
             </p>
           </CardContent>
         </Card>
 
-        <Card className="border-zinc-800 bg-zinc-900">
+        <Card className="border-slate-700/50 bg-slate-900/50 backdrop-blur-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-400">
+            <CardTitle className="text-sm font-medium text-slate-400">
               Bugün Gönderilen
             </CardTitle>
-            <Calendar className="h-4 w-4 text-emerald-500" />
+            <Calendar className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-white">{todayTotal}</div>
-            <p className="text-xs text-zinc-500">kod gönderildi</p>
+            <p className="text-xs text-slate-500">kod gönderildi</p>
           </CardContent>
         </Card>
 
-        <Card className="border-zinc-800 bg-zinc-900">
+        <Card className="border-slate-700/50 bg-slate-900/50 backdrop-blur-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-400">
+            <CardTitle className="text-sm font-medium text-slate-400">
               Bu Hafta
             </CardTitle>
-            <BarChart3 className="h-4 w-4 text-emerald-500" />
+            <BarChart3 className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-white">{weekTotal}</div>
-            <p className="text-xs text-zinc-500">kod gönderildi</p>
+            <p className="text-xs text-slate-500">kod gönderildi</p>
           </CardContent>
         </Card>
 
-        <Card className="border-zinc-800 bg-zinc-900">
+        <Card className="border-slate-700/50 bg-slate-900/50 backdrop-blur-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-400">
+            <CardTitle className="text-sm font-medium text-slate-400">
               Bu Ay
             </CardTitle>
-            <TrendingUp className="h-4 w-4 text-emerald-500" />
+            <TrendingUp className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-white">{monthTotal}</div>
-            <p className="text-xs text-zinc-500">kod gönderildi</p>
+            <p className="text-xs text-slate-500">kod gönderildi</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Channels List */}
-      <Card className="border-zinc-800 bg-zinc-900">
+      <Card className="border-slate-700/50 bg-slate-900/50 backdrop-blur-sm">
         <CardHeader>
           <CardTitle className="text-white">Kanallarınız</CardTitle>
         </CardHeader>
         <CardContent>
           {userChannels.length === 0 ? (
             <div className="text-center py-8">
-              <Radio className="mx-auto h-12 w-12 text-zinc-600" />
-              <p className="mt-4 text-zinc-400">Henüz atanmış kanalınız yok.</p>
-              <p className="text-sm text-zinc-500">
+              <Radio className="mx-auto h-12 w-12 text-slate-600" />
+              <p className="mt-4 text-slate-400">Henüz atanmış kanalınız yok.</p>
+              <p className="text-sm text-slate-500">
                 Süper admin tarafından kanal atanması gerekiyor.
               </p>
             </div>
@@ -181,15 +181,15 @@ export default function DashboardPage() {
                 return (
                   <div
                     key={uc.id}
-                    className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950 p-4"
+                    className="flex items-center justify-between rounded-lg border border-slate-700/50 bg-slate-800/50 p-4"
                   >
                     <div className="flex items-center gap-3">
-                      <div className={`h-3 w-3 rounded-full ${uc.paused ? "bg-red-500" : "bg-emerald-500"}`} />
+                      <div className={`h-3 w-3 rounded-full ${uc.paused ? "bg-red-500" : "bg-blue-500"}`} />
                       <div>
                         <p className="font-medium text-white">
                           {uc.channel.channelName || `Kanal ${uc.channelId}`}
                         </p>
-                        <p className="text-xs text-zinc-500">ID: {uc.channelId}</p>
+                        <p className="text-xs text-slate-500">ID: {uc.channelId}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
@@ -197,9 +197,9 @@ export default function DashboardPage() {
                         <p className="text-sm text-white">
                           {channelTodayStats?.dailyCount || 0} kod
                         </p>
-                        <p className="text-xs text-zinc-500">bugün</p>
+                        <p className="text-xs text-slate-500">bugün</p>
                       </div>
-                      <Badge variant={uc.paused ? "destructive" : "default"} className={uc.paused ? "" : "bg-emerald-600"}>
+                      <Badge variant={uc.paused ? "destructive" : "default"} className={uc.paused ? "" : "bg-blue-600 hover:bg-blue-700"}>
                         {uc.paused ? "Durduruldu" : "Aktif"}
                       </Badge>
                     </div>
