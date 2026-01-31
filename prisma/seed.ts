@@ -15,7 +15,6 @@ async function main() {
       password: hashedPassword,
       displayName: "Super Admin",
       role: "superadmin",
-      telegramId: BigInt(5725763398), // SUPER_ADMIN_ID from bot.py
     },
   });
 
