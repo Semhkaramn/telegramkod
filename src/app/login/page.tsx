@@ -34,17 +34,12 @@ function LoginForm() {
         return;
       }
 
-      // Admin ise admin paneline yonlendir
-      if (data.user.role === "superadmin") {
-        router.push("/admin");
+      // Dashboard'a yonlendir
+      const from = searchParams.get("from");
+      if (from) {
+        router.push(from);
       } else {
-        // Normal kullanici icin dashboard'a yonlendir
-        const from = searchParams.get("from");
-        if (from && !from.startsWith("/admin")) {
-          router.push(from);
-        } else {
-          router.push("/dashboard");
-        }
+        router.push("/dashboard");
       }
     } catch (err) {
       setError("Baglanti hatasi");
