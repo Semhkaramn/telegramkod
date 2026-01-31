@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Radio, Play, Pause, BarChart3, AlertTriangle } from "lucide-react";
+import { Radio, Play, Pause, BarChart3, AlertTriangle, Tv } from "lucide-react";
 
 interface ChannelStats {
   id: number;
@@ -96,7 +96,7 @@ export default function ChannelsPage() {
         );
       } else {
         const data = await response.json();
-        alert(data.error || "Bir hata olustu");
+        alert(data.error || "Bir hata oluştu");
       }
     } catch (error) {
       console.error("Error toggling pause:", error);
@@ -135,10 +135,10 @@ export default function ChannelsPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <Skeleton className="h-10 w-48 bg-zinc-800" />
+        <Skeleton className="h-10 w-48 bg-slate-800" />
         <div className="space-y-4">
           {[...Array(3)].map((_, i) => (
-            <Skeleton key={i} className="h-40 bg-zinc-800" />
+            <Skeleton key={i} className="h-40 bg-slate-800" />
           ))}
         </div>
       </div>
@@ -148,8 +148,11 @@ export default function ChannelsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Kanallarım</h1>
-        <p className="text-zinc-400">
+        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+          <Tv className="h-7 w-7 text-blue-500" />
+          Kanallarım
+        </h1>
+        <p className="text-slate-400 mt-1">
           Atanan kanallarınızı yönetin ve durumlarını kontrol edin.
         </p>
       </div>
@@ -170,13 +173,13 @@ export default function ChannelsPage() {
       )}
 
       {userChannels.length === 0 ? (
-        <Card className="border-zinc-800 bg-zinc-900">
+        <Card className="border-slate-700 bg-slate-900">
           <CardContent className="flex flex-col items-center justify-center py-16">
-            <Radio className="h-16 w-16 text-zinc-600 mb-4" />
+            <Radio className="h-16 w-16 text-slate-600 mb-4" />
             <h3 className="text-lg font-medium text-white mb-2">
               Henüz kanal atanmamış
             </h3>
-            <p className="text-zinc-400 text-center max-w-md">
+            <p className="text-slate-400 text-center max-w-md">
               Süper admin tarafından size kanal atanması gerekiyor. Kanal
               atandıktan sonra burada görüntüleyebilir ve yönetebilirsiniz.
             </p>
@@ -190,7 +193,7 @@ export default function ChannelsPage() {
             const canToggle = userInfo?.botEnabled || !uc.paused;
 
             return (
-              <Card key={uc.id} className="border-zinc-800 bg-zinc-900">
+              <Card key={uc.id} className="border-slate-700 bg-slate-900 hover:bg-slate-900/80 transition-colors">
                 <CardContent className="p-6">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     {/* Channel Info */}
@@ -199,14 +202,14 @@ export default function ChannelsPage() {
                         <img
                           src={uc.channel.channelPhoto}
                           alt={uc.channel.channelName || "Kanal"}
-                          className="h-12 w-12 rounded-lg object-cover"
+                          className="h-14 w-14 rounded-xl object-cover border border-slate-700"
                         />
                       ) : (
                         <div
-                          className={`h-12 w-12 rounded-lg flex items-center justify-center ${
+                          className={`h-14 w-14 rounded-xl flex items-center justify-center ${
                             uc.paused
-                              ? "bg-red-900/30 text-red-400"
-                              : "bg-emerald-900/30 text-emerald-400"
+                              ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                              : "bg-gradient-to-br from-blue-500/20 to-blue-600/20 border border-blue-500/30 text-blue-400"
                           }`}
                         >
                           <Radio className="h-6 w-6" />
@@ -216,9 +219,9 @@ export default function ChannelsPage() {
                         <h3 className="text-lg font-medium text-white">
                           {uc.channel.channelName || `Kanal ${uc.channelId}`}
                         </h3>
-                        <p className="text-sm text-zinc-500">
+                        <p className="text-sm text-slate-500">
                           {uc.channel.channelUsername ? `@${uc.channel.channelUsername}` : `ID: ${uc.channelId}`}
-                          {uc.channel.memberCount && ` · ${uc.channel.memberCount.toLocaleString()} uye`}
+                          {uc.channel.memberCount && ` · ${uc.channel.memberCount.toLocaleString()} üye`}
                         </p>
                       </div>
                     </div>
@@ -227,18 +230,19 @@ export default function ChannelsPage() {
                     <div className="flex items-center gap-4">
                       <Badge
                         variant={uc.paused ? "destructive" : "default"}
-                        className={uc.paused ? "" : "bg-emerald-600"}
+                        className={uc.paused ? "bg-red-500/20 text-red-400 border border-red-500/30" : "bg-gradient-to-r from-blue-600 to-blue-500 text-white"}
                       >
                         {uc.paused ? "Durduruldu" : "Aktif"}
                       </Badge>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-zinc-400">
+                        <span className="text-sm text-slate-400">
                           {uc.paused ? "Başlat" : "Durdur"}
                         </span>
                         <Switch
                           checked={!uc.paused}
                           onCheckedChange={() => togglePause(uc.channelId, uc.paused)}
                           disabled={isUpdating || !canToggle}
+                          className="data-[state=checked]:bg-blue-600"
                         />
                       </div>
                     </div>
@@ -246,36 +250,36 @@ export default function ChannelsPage() {
 
                   {/* Stats */}
                   <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="rounded-lg bg-zinc-950 border border-zinc-800 p-4">
-                      <div className="flex items-center gap-2 text-zinc-400 mb-1">
-                        <BarChart3 className="h-4 w-4" />
+                    <div className="rounded-xl bg-slate-800/50 border border-slate-700 p-4">
+                      <div className="flex items-center gap-2 text-slate-400 mb-1">
+                        <BarChart3 className="h-4 w-4 text-blue-400" />
                         <span className="text-xs">Bugün</span>
                       </div>
                       <p className="text-2xl font-bold text-white">
                         {stats.todayCount}
                       </p>
                     </div>
-                    <div className="rounded-lg bg-zinc-950 border border-zinc-800 p-4">
-                      <div className="flex items-center gap-2 text-zinc-400 mb-1">
-                        <BarChart3 className="h-4 w-4" />
+                    <div className="rounded-xl bg-slate-800/50 border border-slate-700 p-4">
+                      <div className="flex items-center gap-2 text-slate-400 mb-1">
+                        <BarChart3 className="h-4 w-4 text-blue-400" />
                         <span className="text-xs">Bu Hafta</span>
                       </div>
                       <p className="text-2xl font-bold text-white">
                         {stats.weekCount}
                       </p>
                     </div>
-                    <div className="rounded-lg bg-zinc-950 border border-zinc-800 p-4">
-                      <div className="flex items-center gap-2 text-zinc-400 mb-1">
-                        <BarChart3 className="h-4 w-4" />
+                    <div className="rounded-xl bg-slate-800/50 border border-slate-700 p-4">
+                      <div className="flex items-center gap-2 text-slate-400 mb-1">
+                        <BarChart3 className="h-4 w-4 text-blue-400" />
                         <span className="text-xs">Bu Ay</span>
                       </div>
                       <p className="text-2xl font-bold text-white">
                         {stats.monthCount}
                       </p>
                     </div>
-                    <div className="rounded-lg bg-zinc-950 border border-zinc-800 p-4">
-                      <div className="flex items-center gap-2 text-zinc-400 mb-1">
-                        <BarChart3 className="h-4 w-4" />
+                    <div className="rounded-xl bg-slate-800/50 border border-slate-700 p-4">
+                      <div className="flex items-center gap-2 text-slate-400 mb-1">
+                        <BarChart3 className="h-4 w-4 text-blue-400" />
                         <span className="text-xs">Toplam</span>
                       </div>
                       <p className="text-2xl font-bold text-white">
@@ -292,14 +296,14 @@ export default function ChannelsPage() {
 
       {/* Bulk Actions */}
       {userChannels.length > 1 && userInfo?.botEnabled && (
-        <Card className="border-zinc-800 bg-zinc-900">
+        <Card className="border-slate-700 bg-slate-900">
           <CardHeader>
             <CardTitle className="text-white text-base">Toplu İşlemler</CardTitle>
           </CardHeader>
-          <CardContent className="flex gap-4">
+          <CardContent className="flex flex-wrap gap-4">
             <Button
               variant="outline"
-              className="border-emerald-600 text-emerald-400 hover:bg-emerald-900/30"
+              className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
               onClick={async () => {
                 for (const uc of userChannels.filter((c) => c.paused)) {
                   await togglePause(uc.channelId, true);
@@ -311,7 +315,7 @@ export default function ChannelsPage() {
             </Button>
             <Button
               variant="outline"
-              className="border-red-600 text-red-400 hover:bg-red-900/30"
+              className="border-red-500/30 text-red-400 hover:bg-red-500/10"
               onClick={async () => {
                 for (const uc of userChannels.filter((c) => !c.paused)) {
                   await togglePause(uc.channelId, false);
