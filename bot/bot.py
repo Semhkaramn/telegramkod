@@ -390,8 +390,27 @@ def normalize_channel_id(channel_id: int) -> int:
     return channel_id
 
 # —————— KOD GÖNDER ——————
+async def send_to_single_channel(channel_id: int, code: str, original_link: str) -> dict:
+    """Tek kanala kod gönder (paralel gönderim için)"""
+    try:
+        final_link = get_link_for_channel(channel_id, code, original_link)
+        message = f"`{code}`\n\n{final_link}"
+
+        result = await send_message_via_bot(channel_id, message)
+
+        if result.get("ok"):
+            record_code_stat(channel_id, code)
+            print(f"✅ Gönderildi: {channel_id}")
+            return {"channel_id": channel_id, "success": True}
+        else:
+            print(f"❌ Gönderilemedi: {channel_id} - {result.get('error')}")
+            return {"channel_id": channel_id, "success": False, "error": result.get('error')}
+    except Exception as e:
+        print(f"❌ Gönderim hatası {channel_id}: {e}")
+        return {"channel_id": channel_id, "success": False, "error": str(e)}
+
 async def send_to_all_channels(code: str, original_link: str):
-    """Kodu tüm aktif kanallara gönder"""
+    """Kodu tüm aktif kanallara PARALEL olarak gönder"""
     print(f"🚀 DEBUG send_to_all_channels başladı: code={code}, link={original_link}")
 
     try:
@@ -403,36 +422,31 @@ async def send_to_all_channels(code: str, original_link: str):
             log_bot_message("warning", f"Aktif kanal yok, kod gönderilemedi: {code}")
             return
 
+        print(f"🚀 {len(active_channels)} kanala PARALEL gönderim başlıyor...")
+
+        # Tüm kanallara paralel gönderim
+        tasks = [
+            send_to_single_channel(channel_id, code, original_link)
+            for channel_id in active_channels
+        ]
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Sonuçları say
         sent_count = 0
         error_count = 0
 
-        for channel_id in active_channels:
-            print(f"🔍 DEBUG: Kanala gönderiliyor: {channel_id}")
-            try:
-                # Kanal için linki al (özel veya orijinal)
-                final_link = get_link_for_channel(channel_id, code, original_link)
-                message = f"`{code}`\n\n{final_link}"
-                print(f"🔍 DEBUG: Mesaj hazırlandı: {message[:100]}...")
-
-                result = await send_message_via_bot(channel_id, message)
-
-                if result.get("ok"):
-                    record_code_stat(channel_id, code)
-                    sent_count += 1
-                    print(f"✅ Gönderildi: {channel_id}")
-                else:
-                    error_count += 1
-                    print(f"❌ Gönderilemedi: {channel_id} - {result.get('error')}")
-
-                await asyncio.sleep(0.05)
-
-            except Exception as e:
+        for result in results:
+            if isinstance(result, Exception):
                 error_count += 1
-                print(f"❌ Gönderim hatası {channel_id}: {e}")
-                print(traceback.format_exc())
+                print(f"❌ Task hatası: {result}")
+            elif result.get("success"):
+                sent_count += 1
+            else:
+                error_count += 1
 
         if sent_count > 0:
-            print(f"✅ Kod gönderildi: {code} | {sent_count}/{len(active_channels)} kanal")
+            print(f"✅ Kod gönderildi: {code} | {sent_count}/{len(active_channels)} kanal (PARALEL)")
             log_bot_message("info", f"Kod gönderildi: {code}", f"{sent_count} başarılı, {error_count} hata")
             cleanup_old_codes()
         else:
