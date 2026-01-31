@@ -142,6 +142,10 @@ export async function PATCH(
       });
     }
 
+    // Cache'i invalidate et - kullanıcı durumu değişti (botEnabled, isBanned, isActive)
+    // Bot aktif kanalları yenilemeli
+    await invalidateCache();
+
     return NextResponse.json(user);
   } catch (error) {
     console.error("Update user error:", error);
@@ -174,6 +178,9 @@ export async function DELETE(
     await prisma.user.delete({
       where: { id: userId },
     });
+
+    // Cache'i invalidate et - kullanıcı silindi, aktif kanallar değişebilir
+    await invalidateCache();
 
     return NextResponse.json({ success: true });
   } catch (error) {
