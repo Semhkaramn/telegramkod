@@ -92,7 +92,8 @@ export async function clearImpersonation(): Promise<void> {
   const session = await getSession();
   if (!session) return;
 
-  const { impersonatingUserId, ...rest } = session;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { impersonatingUserId: _removed, ...rest } = session;
   await createSession(rest);
 }
 
