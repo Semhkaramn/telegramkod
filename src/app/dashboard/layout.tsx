@@ -14,14 +14,16 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950">
+    <div className="min-h-screen bg-slate-950">
       <DashboardSidebar
         user={user}
         isImpersonating={user.isImpersonating}
         realUser={user.isImpersonating ? (user as any).realUser : null}
       />
-      <main className="ml-64 min-h-screen p-8">
-        {children}
+      <main className="min-h-screen pt-20 px-4 pb-8 lg:pt-8 lg:pl-80 lg:pr-8">
+        <div className="max-w-7xl mx-auto">
+          {children}
+        </div>
       </main>
     </div>
   );
