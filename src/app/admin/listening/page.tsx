@@ -13,6 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Headphones, Plus } from "lucide-react";
 
 interface ListeningChannel {
   channel_id: string;
@@ -66,7 +67,7 @@ export default function ListeningChannelsPage() {
 
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || "Bir hata olustu");
+        setError(data.error || "Bir hata oluştu");
         setSubmitting(false);
         return;
       }
@@ -79,7 +80,7 @@ export default function ListeningChannelsPage() {
       });
       fetchChannels();
     } catch (error) {
-      setError("Baglantı hatası");
+      setError("Bağlantı hatası");
     } finally {
       setSubmitting(false);
     }
@@ -95,7 +96,7 @@ export default function ListeningChannelsPage() {
   };
 
   const handleDelete = async (channelId: string) => {
-    if (!confirm("Bu dinleme kanalını silmek istediginizden emin misiniz?")) return;
+    if (!confirm("Bu dinleme kanalını silmek istediğinizden emin misiniz?")) return;
 
     try {
       const res = await fetch(`/api/listening-channels?channel_id=${channelId}`, {
@@ -122,10 +123,10 @@ export default function ListeningChannelsPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <Skeleton className="h-8 w-48 bg-zinc-800" />
+        <Skeleton className="h-8 w-48 bg-slate-800" />
         <div className="grid gap-4">
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-32 bg-zinc-800" />
+            <Skeleton key={i} className="h-32 bg-slate-800" />
           ))}
         </div>
       </div>
@@ -136,25 +137,25 @@ export default function ListeningChannelsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-100">Dinleme Kanalları</h1>
-          <p className="text-zinc-400">Kod kaynaklarını yonetin</p>
+          <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
+            <Headphones className="h-7 w-7 text-blue-500" />
+            Dinleme Kanalları
+          </h1>
+          <p className="text-slate-400 mt-1">Kod kaynaklarını yönetin</p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={openNewDialog} className="bg-zinc-100 text-zinc-900 hover:bg-zinc-200">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
-                <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
-                <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
-              </svg>
+            <Button onClick={openNewDialog} className="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white shadow-lg shadow-blue-500/25">
+              <Plus className="mr-2 h-4 w-4" />
               Yeni Dinleme Kanalı
             </Button>
           </DialogTrigger>
-          <DialogContent className="bg-zinc-900 border-zinc-800 max-w-lg">
+          <DialogContent className="bg-slate-900 border-slate-700 max-w-lg">
             <DialogHeader>
-              <DialogTitle className="text-zinc-100">
-                {editingChannel ? "Dinleme Kanalını Duzenle" : "Yeni Dinleme Kanalı"}
+              <DialogTitle className="text-slate-100">
+                {editingChannel ? "Dinleme Kanalını Düzenle" : "Yeni Dinleme Kanalı"}
               </DialogTitle>
-              <DialogDescription className="text-zinc-400">
+              <DialogDescription className="text-slate-400">
                 Kod dinlenecek kanal bilgilerini girin
               </DialogDescription>
             </DialogHeader>
@@ -165,42 +166,42 @@ export default function ListeningChannelsPage() {
                 </div>
               )}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300">Kanal ID</label>
+                <label className="text-sm font-medium text-slate-300">Kanal ID</label>
                 <Input
                   value={formData.channel_id}
                   onChange={(e) => setFormData({ ...formData, channel_id: e.target.value })}
-                  className="bg-zinc-800 border-zinc-700 text-zinc-100"
+                  className="bg-slate-800 border-slate-700 text-slate-100 focus:border-blue-500"
                   placeholder="-1001234567890"
                   required
                   disabled={!!editingChannel}
                 />
-                <p className="text-xs text-zinc-500">Telegram kanal ID'si (ör: -1001234567890)</p>
+                <p className="text-xs text-slate-500">Telegram kanal ID'si (ör: -1001234567890)</p>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300">Kanal Adı</label>
+                <label className="text-sm font-medium text-slate-300">Kanal Adı</label>
                 <Input
                   value={formData.channel_name}
                   onChange={(e) => setFormData({ ...formData, channel_name: e.target.value })}
-                  className="bg-zinc-800 border-zinc-700 text-zinc-100"
+                  className="bg-slate-800 border-slate-700 text-slate-100 focus:border-blue-500"
                   placeholder="Kaynak Kanal"
                 />
-                <p className="text-xs text-zinc-500">Kanalı tanımlamak için bir isim (isteğe bağlı)</p>
+                <p className="text-xs text-slate-500">Kanalı tanımlamak için bir isim (isteğe bağlı)</p>
               </div>
               <div className="flex gap-3 pt-4">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setDialogOpen(false)}
-                  className="flex-1 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                  className="flex-1 border-slate-700 text-slate-300 hover:bg-slate-800"
                 >
-                  Iptal
+                  İptal
                 </Button>
                 <Button
                   type="submit"
                   disabled={submitting}
-                  className="flex-1 bg-zinc-100 text-zinc-900 hover:bg-zinc-200"
+                  className="flex-1 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white"
                 >
-                  {submitting ? "Kaydediliyor..." : editingChannel ? "Guncelle" : "Ekle"}
+                  {submitting ? "Kaydediliyor..." : editingChannel ? "Güncelle" : "Ekle"}
                 </Button>
               </div>
             </form>
@@ -211,35 +212,29 @@ export default function ListeningChannelsPage() {
       {/* Channels List */}
       <div className="grid gap-4">
         {channels.length === 0 ? (
-          <Card className="bg-zinc-900 border-zinc-800">
+          <Card className="bg-slate-900/50 border-slate-700/50">
             <CardContent className="py-12 text-center">
-              <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center mx-auto mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500">
-                  <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
-                  <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
-                </svg>
+              <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-4">
+                <Headphones className="h-8 w-8 text-slate-500" />
               </div>
-              <p className="text-zinc-500">Henuz dinleme kanalı yok</p>
-              <p className="text-sm text-zinc-600 mt-1">Kodların dinlenecegi kanalları ekleyin</p>
+              <p className="text-slate-500">Henüz dinleme kanalı yok</p>
+              <p className="text-sm text-slate-600 mt-1">Kodların dinleneceği kanalları ekleyin</p>
             </CardContent>
           </Card>
         ) : (
           channels.map((channel) => (
-            <Card key={channel.channel_id} className="bg-zinc-900 border-zinc-800">
+            <Card key={channel.channel_id} className="bg-slate-900/50 border-slate-700/50 backdrop-blur-sm">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-400">
-                        <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
-                        <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
-                      </svg>
+                    <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
+                      <Headphones className="h-5 w-5 text-blue-400" />
                     </div>
                     <div>
-                      <CardTitle className="text-zinc-100 text-lg">
+                      <CardTitle className="text-slate-100 text-lg">
                         {channel.channel_name || `Kanal ${channel.channel_id}`}
                       </CardTitle>
-                      <CardDescription className="text-zinc-500">
+                      <CardDescription className="text-slate-500">
                         ID: {channel.channel_id}
                       </CardDescription>
                     </div>
@@ -249,9 +244,9 @@ export default function ListeningChannelsPage() {
                       size="sm"
                       variant="outline"
                       onClick={() => handleEdit(channel)}
-                      className="border-zinc-700 text-zinc-300 hover:bg-zinc-700"
+                      className="border-slate-700 text-slate-300 hover:bg-slate-700"
                     >
-                      Duzenle
+                      Düzenle
                     </Button>
                     <Button
                       size="sm"
