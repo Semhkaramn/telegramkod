@@ -66,14 +66,13 @@ def get_all_target_channels():
         return cursor.fetchall()
 
 def get_listening_channels():
-    """Aktif dinleme kanallarını al (is_active = true)"""
+    """Tüm dinleme kanallarını al - her zaman aktif"""
     with get_db_connection() as db:
         cursor = db.cursor()
         cursor.execute("""
             SELECT channel_id, COALESCE(default_link, 'https://example.com'),
                    COALESCE(keyword, ''), COALESCE(type, 'text'), COALESCE(triggers, '')
             FROM listening_channels
-            WHERE is_active = true
         """)
         return cursor.fetchall()
 
