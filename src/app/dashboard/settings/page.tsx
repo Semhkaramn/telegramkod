@@ -41,8 +41,10 @@ export default function SettingsPage() {
       const response = await fetch("/api/auth/me");
       if (response.ok) {
         const data = await response.json();
-        setUser(data);
-        setDisplayName(data.displayName || "");
+        // API /api/auth/me { user: {...} } formatında döner
+        const userData = data.user || data;
+        setUser(userData);
+        setDisplayName(userData.displayName || "");
       }
     } catch (error) {
       console.error("Error fetching user:", error);
