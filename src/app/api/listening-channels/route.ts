@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getListeningChannels, addListeningChannel, removeListeningChannel, updateListeningChannel } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { invalidateCache } from "@/lib/cache";
 
 export async function GET() {
   try {
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest) {
 
     // Dinleme kanalı ekle - sadece channel_id ve channel_name gerekli
     await addListeningChannel(Number(channel_id), channel_name || undefined);
+    await invalidateCache();
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error adding listening channel:", error);
@@ -55,6 +57,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     await removeListeningChannel(Number(channelId));
+    await invalidateCache();
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error removing listening channel:", error);
@@ -81,6 +84,7 @@ export async function PATCH(request: NextRequest) {
     if (channel_name !== undefined) updateData.channelName = channel_name;
 
     await updateListeningChannel(Number(channel_id), updateData);
+    await invalidateCache();
 
     return NextResponse.json({ success: true });
   } catch (error) {
