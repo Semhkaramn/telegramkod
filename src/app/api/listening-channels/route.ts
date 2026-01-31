@@ -20,8 +20,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "channel_id is required" }, { status: 400 });
     }
 
-    // Varsayılan olarak KAPALI (isActive: false)
-    await addListeningChannel(Number(channel_id), undefined, default_link, undefined, undefined, undefined, false);
+    // Dinleme kanalları her zaman aktif - is_active ayarı yok
+    await addListeningChannel(Number(channel_id), undefined, default_link);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error adding listening channel:", error);
@@ -49,7 +49,7 @@ export async function DELETE(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { channel_id, channel_name, default_link, keyword, type, triggers, is_active } = body;
+    const { channel_id, channel_name, default_link, keyword, type, triggers } = body;
 
     if (!channel_id) {
       return NextResponse.json({ error: "channel_id is required" }, { status: 400 });
@@ -61,7 +61,6 @@ export async function PATCH(request: NextRequest) {
     if (keyword !== undefined) updateData.keyword = keyword;
     if (type !== undefined) updateData.type = type;
     if (triggers !== undefined) updateData.triggers = triggers;
-    if (is_active !== undefined) updateData.isActive = is_active;
 
     await updateListeningChannel(Number(channel_id), updateData);
 
