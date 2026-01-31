@@ -283,6 +283,9 @@ export async function PATCH(request: NextRequest) {
       data: { paused },
     });
 
+    // Cache'i invalidate et - pause durumu değişti, bot aktif kanalları yenilemeli
+    await invalidateCache();
+
     // BigInt'i string'e dönüştür
     return NextResponse.json({
       id: userChannel.id,
