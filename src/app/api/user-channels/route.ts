@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { invalidateCache } from "@/lib/cache";
 
 // Channel tipi - Prisma şemasına uygun
 interface ChannelWithStats {
@@ -158,6 +159,9 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Cache'i invalidate et - bot yeni kanal atamasını görecek
+    await invalidateCache();
+
     // BigInt'i string'e dönüştür
     return NextResponse.json({
       id: userChannel.id,
@@ -201,6 +205,9 @@ export async function DELETE(request: NextRequest) {
         },
       },
     });
+
+    // Cache'i invalidate et
+    await invalidateCache();
 
     return NextResponse.json({ success: true });
   } catch (error) {
