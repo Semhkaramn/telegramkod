@@ -20,7 +20,6 @@ import { useRouter } from "next/navigation";
 interface User {
   id: number;
   username: string;
-  displayName: string | null;
   role: string;
   isActive: boolean;
   isBanned: boolean;
@@ -47,8 +46,6 @@ export default function UsersPage() {
   const [formData, setFormData] = useState({
     username: "",
     password: "",
-    displayName: "",
-    role: "user",
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -82,8 +79,6 @@ export default function UsersPage() {
 
       const body: Record<string, string> = {
         username: formData.username,
-        displayName: formData.displayName || formData.username,
-        role: formData.role,
       };
 
       if (formData.password) {
@@ -106,7 +101,7 @@ export default function UsersPage() {
 
       setDialogOpen(false);
       setEditingUser(null);
-      setFormData({ username: "", password: "", displayName: "", role: "user" });
+      setFormData({ username: "", password: "" });
       fetchUsers();
     } catch (error) {
       setError("Baglantı hatası");
@@ -120,8 +115,6 @@ export default function UsersPage() {
     setFormData({
       username: user.username,
       password: "",
-      displayName: user.displayName || "",
-      role: user.role,
     });
     setDialogOpen(true);
   };
@@ -178,7 +171,7 @@ export default function UsersPage() {
   };
 
   const handleUnbanUser = async (user: User) => {
-    if (!confirm(`${user.displayName || user.username} kullanıcısının banını kaldırmak istediginizden emin misiniz?`)) return;
+    if (!confirm(`${user.username} kullanıcısının banını kaldırmak istediginizden emin misiniz?`)) return;
 
     try {
       const res = await fetch(`/api/users/${user.id}`, {
@@ -211,7 +204,7 @@ export default function UsersPage() {
 
   const openNewUserDialog = () => {
     setEditingUser(null);
-    setFormData({ username: "", password: "", displayName: "", role: "user" });
+    setFormData({ username: "", password: "" });
     setError("");
     setDialogOpen(true);
   };
@@ -311,26 +304,6 @@ export default function UsersPage() {
                   required={!editingUser}
                 />
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300">Gorunen Ad</label>
-                <Input
-                  value={formData.displayName}
-                  onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
-                  className="bg-zinc-800 border-zinc-700 text-zinc-100"
-                  placeholder={formData.username || "Opsiyonel"}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300">Rol</label>
-                <select
-                  value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  className="w-full h-10 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 px-3"
-                >
-                  <option value="user">Kullanıcı</option>
-                  <option value="superadmin">Super Admin</option>
-                </select>
-              </div>
               <div className="flex gap-3 pt-4">
                 <Button
                   type="button"
@@ -359,7 +332,7 @@ export default function UsersPage() {
           <DialogHeader>
             <DialogTitle className="text-zinc-100">Kullanıcıyı Banla</DialogTitle>
             <DialogDescription className="text-zinc-400">
-              {selectedUser?.displayName || selectedUser?.username} kullanıcısını banlamak uzeresiniz.
+              {selectedUser?.username} kullanıcısını banlamak uzeresiniz.
               Banlanan kullanıcı giris yapamaz ve kanallarına kod gonderilmez.
             </DialogDescription>
           </DialogHeader>
@@ -397,17 +370,17 @@ export default function UsersPage() {
         <CardHeader>
           <CardTitle className="text-zinc-100">Kullanıcı Listesi</CardTitle>
           <CardDescription className="text-zinc-400">
-            Toplam {users.length} kullanıcı |
-            {" "}{users.filter(u => u.botEnabled && !u.isBanned).length} aktif bot |
+            Toplam {users.filter(u => u.role !== "superadmin").length} kullanıcı |
+            {" "}{users.filter(u => u.botEnabled && !u.isBanned && u.role !== "superadmin").length} aktif bot |
             {" "}{users.filter(u => u.isBanned).length} banlı
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {users.length === 0 ? (
+            {users.filter(u => u.role !== "superadmin").length === 0 ? (
               <p className="text-zinc-500 text-center py-8">Henuz kullanıcı yok</p>
             ) : (
-              users.map((user) => (
+              users.filter(u => u.role !== "superadmin").map((user) => (
                 <div
                   key={user.id}
                   className={`flex items-center justify-between p-4 rounded-lg transition-colors ${
@@ -422,17 +395,11 @@ export default function UsersPage() {
                         ? "bg-red-500/20 text-red-400"
                         : "bg-zinc-700 text-zinc-300"
                     }`}>
-                      {user.displayName?.[0]?.toUpperCase() || user.username[0].toUpperCase()}
+                      {user.username[0].toUpperCase()}
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-medium text-zinc-100">{user.displayName || user.username}</p>
-                        <Badge
-                          variant={user.role === "superadmin" ? "default" : "secondary"}
-                          className={user.role === "superadmin" ? "bg-amber-500/20 text-amber-400 border-amber-500/30" : "bg-zinc-700 text-zinc-300"}
-                        >
-                          {user.role === "superadmin" ? "Super Admin" : "Kullanıcı"}
-                        </Badge>
+                        <p className="font-medium text-zinc-100">{user.username}</p>
                         {user.isBanned && (
                           <Badge className="bg-red-500/20 text-red-400 border-red-500/30">
                             Banlı
@@ -458,7 +425,7 @@ export default function UsersPage() {
                       <Switch
                         checked={user.botEnabled}
                         onCheckedChange={() => handleToggleBotEnabled(user)}
-                        disabled={user.isBanned || user.role === "superadmin"}
+                        disabled={user.isBanned}
                         className="data-[state=checked]:bg-green-600"
                       />
                     </div>
@@ -472,7 +439,7 @@ export default function UsersPage() {
                     {/* Actions */}
                     <div className="flex gap-2">
                       {/* Active Toggle */}
-                      {!user.isBanned && user.role !== "superadmin" && (
+                      {!user.isBanned && (
                         <Button
                           size="sm"
                           variant="outline"
@@ -496,8 +463,8 @@ export default function UsersPage() {
                         </Button>
                       )}
 
-                      {/* Paneline Gir - Sadece normal kullanıcılar için */}
-                      {user.role !== "superadmin" && !user.isBanned && (
+                      {/* Paneline Gir */}
+                      {!user.isBanned && (
                         <Button
                           size="sm"
                           variant="outline"
@@ -527,34 +494,32 @@ export default function UsersPage() {
                       </Button>
 
                       {/* Ban/Unban */}
-                      {user.role !== "superadmin" && (
-                        user.isBanned ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleUnbanUser(user)}
-                            className="border-green-500/30 text-green-400 hover:bg-green-500/10"
-                            title="Banı Kaldır"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
-                              <path d="m9 12 2 2 4-4" />
-                            </svg>
-                          </Button>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openBanDialog(user)}
-                            className="border-orange-500/30 text-orange-400 hover:bg-orange-500/10"
-                            title="Banla"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <circle cx="12" cy="12" r="10" />
-                              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
-                            </svg>
-                          </Button>
-                        )
+                      {user.isBanned ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleUnbanUser(user)}
+                          className="border-green-500/30 text-green-400 hover:bg-green-500/10"
+                          title="Banı Kaldır"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
+                            <path d="m9 12 2 2 4-4" />
+                          </svg>
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openBanDialog(user)}
+                          className="border-orange-500/30 text-orange-400 hover:bg-orange-500/10"
+                          title="Banla"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                          </svg>
+                        </Button>
                       )}
 
                       {/* Delete */}
