@@ -36,11 +36,6 @@ const navItems = [
     icon: LayoutDashboard,
   },
   {
-    title: "Kanallar",
-    href: "/dashboard/channels",
-    icon: LayoutDashboard,
-  },
-  {
     title: "Link Özelleştirme",
     href: "/dashboard/links",
     icon: Link2,
