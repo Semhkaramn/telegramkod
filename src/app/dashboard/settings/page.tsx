@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Lock, Check, X } from "lucide-react";
+import { Lock, Check, X, Settings } from "lucide-react";
 
 interface UserProfile {
   id: number;
@@ -48,12 +48,12 @@ export default function SettingsPage() {
     if (!user) return;
 
     if (newPassword !== confirmPassword) {
-      setPasswordError("Yeni sifreler eslesmiyor");
+      setPasswordError("Yeni şifreler eşleşmiyor");
       return;
     }
 
     if (newPassword.length < 6) {
-      setPasswordError("Sifre en az 6 karakter olmali");
+      setPasswordError("Şifre en az 6 karakter olmalı");
       return;
     }
 
@@ -79,10 +79,10 @@ export default function SettingsPage() {
         setTimeout(() => setPasswordSuccess(false), 3000);
       } else {
         const data = await response.json();
-        setPasswordError(data.error || "Sifre degistirilemedi");
+        setPasswordError(data.error || "Şifre değiştirilemedi");
       }
     } catch (error) {
-      setPasswordError("Bir hata olustu");
+      setPasswordError("Bir hata oluştu");
     } finally {
       setPasswordSaving(false);
     }
@@ -91,8 +91,8 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <Skeleton className="h-10 w-48 bg-zinc-800" />
-        <Skeleton className="h-64 bg-zinc-800 max-w-md mx-auto" />
+        <Skeleton className="h-10 w-48 bg-slate-800" />
+        <Skeleton className="h-64 bg-slate-800 max-w-md mx-auto" />
       </div>
     );
   }
@@ -100,55 +100,58 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Ayarlar</h1>
-        <p className="text-zinc-400">Sifrenizi degistirin</p>
+        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+          <Settings className="h-7 w-7 text-blue-500" />
+          Ayarlar
+        </h1>
+        <p className="text-slate-400 mt-1">Şifrenizi değiştirin</p>
       </div>
 
       <div className="max-w-md">
         {/* Password Settings */}
-        <Card className="border-zinc-800 bg-zinc-900">
+        <Card className="border-slate-700/50 bg-slate-900/50 backdrop-blur-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
-              <Lock className="h-5 w-5 text-emerald-500" />
-              Sifre Degistir
+              <Lock className="h-5 w-5 text-blue-500" />
+              Şifre Değiştir
             </CardTitle>
-            <CardDescription className="text-zinc-500">
-              Hesabinizin sifresini guncelleyin
+            <CardDescription className="text-slate-500">
+              Hesabınızın şifresini güncelleyin
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <label className="text-sm text-zinc-400">Mevcut Sifre</label>
+              <label className="text-sm text-slate-400">Mevcut Şifre</label>
               <Input
                 type="password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="Mevcut sifrenizi girin"
-                className="mt-1 border-zinc-700 bg-zinc-800 text-white"
+                placeholder="Mevcut şifrenizi girin"
+                className="mt-1 border-slate-700 bg-slate-800 text-white focus:border-blue-500 focus:ring-blue-500"
               />
             </div>
 
             <div>
-              <label className="text-sm text-zinc-400">Yeni Sifre</label>
+              <label className="text-sm text-slate-400">Yeni Şifre</label>
               <Input
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Yeni sifrenizi girin"
-                className="mt-1 border-zinc-700 bg-zinc-800 text-white"
+                placeholder="Yeni şifrenizi girin"
+                className="mt-1 border-slate-700 bg-slate-800 text-white focus:border-blue-500 focus:ring-blue-500"
               />
             </div>
 
             <div>
-              <label className="text-sm text-zinc-400">
-                Yeni Sifre (Tekrar)
+              <label className="text-sm text-slate-400">
+                Yeni Şifre (Tekrar)
               </label>
               <Input
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Yeni sifrenizi tekrar girin"
-                className="mt-1 border-zinc-700 bg-zinc-800 text-white"
+                placeholder="Yeni şifrenizi tekrar girin"
+                className="mt-1 border-slate-700 bg-slate-800 text-white focus:border-blue-500 focus:ring-blue-500"
               />
             </div>
 
@@ -160,23 +163,23 @@ export default function SettingsPage() {
             )}
 
             {passwordSuccess && (
-              <div className="flex items-center gap-2 text-sm text-emerald-400">
+              <div className="flex items-center gap-2 text-sm text-blue-400">
                 <Check className="h-4 w-4" />
-                Sifre basariyla degistirildi
+                Şifre başarıyla değiştirildi
               </div>
             )}
 
             <Button
               onClick={handlePasswordChange}
               disabled={passwordSaving || !currentPassword || !newPassword || !confirmPassword}
-              className="w-full bg-emerald-600 hover:bg-emerald-700"
+              className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white shadow-lg shadow-blue-500/25"
             >
               {passwordSaving ? (
-                "Degistiriliyor..."
+                "Değiştiriliyor..."
               ) : (
                 <>
                   <Lock className="mr-2 h-4 w-4" />
-                  Sifre Degistir
+                  Şifre Değiştir
                 </>
               )}
             </Button>
