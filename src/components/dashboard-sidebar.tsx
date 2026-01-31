@@ -36,12 +36,12 @@ const navItems = [
     icon: LayoutDashboard,
   },
   {
-    title: "Link Ozellestirme",
+    title: "Link Özelleştirme",
     href: "/dashboard/links",
     icon: Link2,
   },
   {
-    title: "Istatistikler",
+    title: "İstatistikler",
     href: "/dashboard/stats",
     icon: BarChart3,
   },
@@ -121,17 +121,6 @@ export function DashboardSidebar({ user, isImpersonating, realUser }: DashboardS
 
         {/* Logout */}
         <div className="border-t border-zinc-800 p-4">
-          {/* Admin Link (sadece superadmin ise) */}
-          {user.role === "superadmin" && !isImpersonating && (
-            <Link
-              href="/admin"
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-white mb-2"
-            >
-              <LayoutDashboard className="h-4 w-4" />
-              Admin Paneli
-            </Link>
-          )}
-
           <Button
             variant="ghost"
             className="w-full justify-start text-zinc-400 hover:bg-zinc-800 hover:text-white"
