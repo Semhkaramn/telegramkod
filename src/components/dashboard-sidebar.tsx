@@ -14,7 +14,6 @@ import {
   ArrowLeft,
   Menu,
   X,
-  Tv,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -40,17 +39,12 @@ const navItems = [
     icon: LayoutDashboard,
   },
   {
-    title: "Kanallarım",
-    href: "/dashboard/channels",
-    icon: Tv,
-  },
-  {
-    title: "Link Özelleştirme",
+    title: "Link Ozellestirme",
     href: "/dashboard/links",
     icon: Link2,
   },
   {
-    title: "İstatistikler",
+    title: "Istatistikler",
     href: "/dashboard/stats",
     icon: BarChart3,
   },
