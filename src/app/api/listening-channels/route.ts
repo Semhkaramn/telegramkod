@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getListeningChannels, addListeningChannel, removeListeningChannel, updateListeningChannel } from "@/lib/db";
+import { getSession } from "@/lib/auth";
 
 export async function GET() {
   try {
+    const session = await getSession();
+    if (!session || session.role !== "superadmin") {
+      return NextResponse.json({ error: "Yetkisiz erisim" }, { status: 403 });
+    }
+
     const channels = await getListeningChannels();
     return NextResponse.json(channels);
   } catch (error) {
@@ -13,6 +19,11 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await getSession();
+    if (!session || session.role !== "superadmin") {
+      return NextResponse.json({ error: "Yetkisiz erisim" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { channel_id, channel_name } = body;
 
@@ -31,6 +42,11 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const session = await getSession();
+    if (!session || session.role !== "superadmin") {
+      return NextResponse.json({ error: "Yetkisiz erisim" }, { status: 403 });
+    }
+
     const { searchParams } = new URL(request.url);
     const channelId = searchParams.get("channel_id");
 
@@ -48,6 +64,11 @@ export async function DELETE(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
+    const session = await getSession();
+    if (!session || session.role !== "superadmin") {
+      return NextResponse.json({ error: "Yetkisiz erisim" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { channel_id, channel_name } = body;
 
