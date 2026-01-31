@@ -133,7 +133,10 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Link bulunamadi" }, { status: 404 });
     }
 
-    if (link.userId !== session.userId && session.role !== "superadmin") {
+    // Impersonation durumunda taklit edilen kullanicinin ID'sini kullan
+    const effectiveUserId = session.impersonatingUserId || session.userId;
+
+    if (link.userId !== effectiveUserId && session.role !== "superadmin") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
