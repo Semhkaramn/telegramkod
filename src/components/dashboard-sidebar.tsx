@@ -36,17 +36,12 @@ const navItems = [
     icon: LayoutDashboard,
   },
   {
-    title: "Kanallarım",
-    href: "/dashboard/channels",
-    icon: Radio,
-  },
-  {
-    title: "Link Özelleştirme",
+    title: "Link Ozellestirme",
     href: "/dashboard/links",
     icon: Link2,
   },
   {
-    title: "İstatistikler",
+    title: "Istatistikler",
     href: "/dashboard/stats",
     icon: BarChart3,
   },
@@ -88,7 +83,7 @@ export function DashboardSidebar({ user, isImpersonating, realUser }: DashboardS
         {isImpersonating && realUser && (
           <div className="border-b border-amber-600/30 bg-amber-900/20 px-4 py-3">
             <p className="text-xs text-amber-400 mb-2">
-              {user.displayName || user.username} olarak görüntülüyorsunuz
+              {user.displayName || user.username} olarak goruntuluyorsunuz
             </p>
             <Button
               size="sm"
@@ -97,7 +92,7 @@ export function DashboardSidebar({ user, isImpersonating, realUser }: DashboardS
               onClick={handleStopImpersonating}
             >
               <ArrowLeft className="mr-2 h-3 w-3" />
-              Kendi Panelime Dön
+              Kendi Panelime Don
             </Button>
           </div>
         )}
@@ -124,15 +119,8 @@ export function DashboardSidebar({ user, isImpersonating, realUser }: DashboardS
           })}
         </nav>
 
-        {/* User Info & Logout */}
+        {/* Logout */}
         <div className="border-t border-zinc-800 p-4">
-          <div className="mb-3 rounded-lg bg-zinc-900 p-3">
-            <p className="text-sm font-medium text-white">
-              {user.displayName || user.username}
-            </p>
-            <p className="text-xs text-zinc-500">@{user.username}</p>
-          </div>
-
           {/* Admin Link (sadece superadmin ise) */}
           {user.role === "superadmin" && !isImpersonating && (
             <Link
@@ -150,7 +138,7 @@ export function DashboardSidebar({ user, isImpersonating, realUser }: DashboardS
             onClick={handleLogout}
           >
             <LogOut className="mr-2 h-4 w-4" />
-            Çıkış Yap
+            Cikis Yap
           </Button>
         </div>
       </div>
