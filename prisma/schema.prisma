@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Kullanıcı sistemi (yeni)
+model User {
+  id          Int      @id @default(autoincrement())
+  username    String   @unique
+  password    String
+  telegramId  BigInt?  @unique @map("telegram_id")
+  displayName String?  @map("display_name")
+  role        String   @default("user") // "superadmin" veya "user"
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // İlişkiler
+  channels   UserChannel[]
+  adminLinks AdminLink[]
+
+  @@map("users")
+}
+
+// Kullanıcı-Kanal ilişkisi
+model UserChannel {
+  id        Int     @id @default(autoincrement())
+  userId    Int     @map("user_id")
+  channelId BigInt  @map("channel_id")
+  paused    Boolean @default(false)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [channelId], onDelete: Cascade)
+
+  @@unique([userId, channelId])
+  @@map("user_channels")
+}
+
+// Kanallar (hedef kanallar)
+model Channel {
+  channelId   BigInt   @id @map("channel_id")
+  channelName String?  @map("channel_name")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  userChannels UserChannel[]
+  stats        ChannelStats[]
+
+  @@map("channels")
+}
+
+// Dinleme kanalları
+model ListeningChannel {
+  channelId   BigInt  @id @map("channel_id")
+  channelName String? @map("channel_name")
+  defaultLink String  @default("https://example.com") @map("default_link")
+  keyword     String  @default("")
+  type        String  @default("text")
+  triggers    String  @default("")
+
+  @@map("listening_channels")
+}
+
+// Admin linkleri (kullanıcı bazlı link özelleştirme)
+model AdminLink {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  channelId BigInt   @map("channel_id")
+  linkCode  String   @map("link_code")
+  linkUrl   String   @map("link_url")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, channelId, linkCode])
+  @@map("admin_links")
+}
+
+// Kanal istatistikleri
+model ChannelStats {
+  id          Int      @id @default(autoincrement())
+  channelId   BigInt   @map("channel_id")
+  statDate    DateTime @map("stat_date") @db.Date
+  dailyCount  Int      @default(0) @map("daily_count")
+  codeList    String   @default("") @map("code_list")
+  lastUpdated DateTime @default(now()) @map("last_updated")
+
+  channel Channel @relation(fields: [channelId], references: [channelId], onDelete: Cascade)
+
+  @@unique([channelId, statDate])
+  @@map("channel_stats")
+}
+
+// Gönderilmiş kodlar (1 saat cache)
+model SentCode {
+  code   String   @id
+  sentAt DateTime @default(now()) @map("sent_at")
+
+  @@map("sent_codes")
+}
+
+// Katılınan kanallar
+model JoinedChannel {
+  channelId BigInt   @id @map("channel_id")
+  joinedAt  DateTime @default(now()) @map("joined_at")
+
+  @@map("joined_channels")
+}
+
+// Anahtar kelimeler
+model Keyword {
+  id      Int    @id @default(autoincrement())
+  keyword String @unique
+
+  @@map("keywords")
+}
+
+// Yasak kelimeler
+model BannedWord {
+  id   Int    @id @default(autoincrement())
+  word String @unique
+
+  @@map("banned_words")
+}
