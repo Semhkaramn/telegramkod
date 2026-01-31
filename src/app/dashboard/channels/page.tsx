@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Radio, Play, Pause, BarChart3 } from "lucide-react";
+import { Radio, Play, Pause, BarChart3, AlertTriangle } from "lucide-react";
 
 interface ChannelStats {
   id: number;
@@ -18,6 +18,7 @@ interface ChannelStats {
 interface Channel {
   channelId: string;
   channelName: string | null;
+  channelPhoto: string | null;
   stats: ChannelStats[];
 }
 
@@ -29,30 +30,51 @@ interface UserChannel {
   channel: Channel;
 }
 
+interface UserInfo {
+  botEnabled: boolean;
+  isBanned: boolean;
+}
+
 export default function ChannelsPage() {
   const [userChannels, setUserChannels] = useState<UserChannel[]>([]);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchUserChannels();
+    fetchData();
   }, []);
 
-  const fetchUserChannels = async () => {
+  const fetchData = async () => {
     try {
-      const response = await fetch("/api/user-channels");
-      if (response.ok) {
-        const data = await response.json();
+      const [channelsRes, userRes] = await Promise.all([
+        fetch("/api/user-channels"),
+        fetch("/api/auth/me")
+      ]);
+
+      if (channelsRes.ok) {
+        const data = await channelsRes.json();
         setUserChannels(data);
       }
+
+      if (userRes.ok) {
+        const userData = await userRes.json();
+        setUserInfo(userData.user || userData);
+      }
     } catch (error) {
-      console.error("Error fetching channels:", error);
+      console.error("Error fetching data:", error);
     } finally {
       setLoading(false);
     }
   };
 
   const togglePause = async (channelId: string, currentPaused: boolean) => {
+    // Bot kapalıysa aktifleştirme yapılamaz
+    if (!userInfo?.botEnabled && currentPaused) {
+      alert("Bot yönetici tarafından durdurulmuş. Kanalları aktifleştiremezsiniz.");
+      return;
+    }
+
     setUpdating(channelId);
     try {
       const response = await fetch("/api/user-channels", {
@@ -70,6 +92,9 @@ export default function ChannelsPage() {
             uc.channelId === channelId ? { ...uc, paused: !currentPaused } : uc
           )
         );
+      } else {
+        const data = await response.json();
+        alert(data.error || "Bir hata olustu");
       }
     } catch (error) {
       console.error("Error toggling pause:", error);
@@ -86,9 +111,11 @@ export default function ChannelsPage() {
     let todayCount = 0;
     let weekCount = 0;
     let monthCount = 0;
+    let totalCount = 0;
 
     channel.stats.forEach((stat) => {
       const statDate = stat.statDate.split("T")[0];
+      totalCount += stat.dailyCount;
       if (statDate === today) {
         todayCount += stat.dailyCount;
       }
@@ -100,7 +127,7 @@ export default function ChannelsPage() {
       }
     });
 
-    return { todayCount, weekCount, monthCount };
+    return { todayCount, weekCount, monthCount, totalCount };
   };
 
   if (loading) {
@@ -125,6 +152,21 @@ export default function ChannelsPage() {
         </p>
       </div>
 
+      {/* Bot Disabled Warning */}
+      {userInfo && !userInfo.botEnabled && (
+        <Card className="border-orange-500/30 bg-orange-500/10">
+          <CardContent className="flex items-center gap-3 py-4">
+            <AlertTriangle className="h-5 w-5 text-orange-400" />
+            <div>
+              <p className="font-medium text-orange-400">Bot Durduruldu</p>
+              <p className="text-sm text-orange-300/80">
+                Yönetici tarafından botunuz durdurulmuştur. Kanallarınıza kod gönderilmeyecek ve kanalları aktifleştiremezsiniz.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {userChannels.length === 0 ? (
         <Card className="border-zinc-800 bg-zinc-900">
           <CardContent className="flex flex-col items-center justify-center py-16">
@@ -143,6 +185,7 @@ export default function ChannelsPage() {
           {userChannels.map((uc) => {
             const stats = getChannelStats(uc.channel);
             const isUpdating = updating === uc.channelId;
+            const canToggle = userInfo?.botEnabled || !uc.paused;
 
             return (
               <Card key={uc.id} className="border-zinc-800 bg-zinc-900">
@@ -150,15 +193,23 @@ export default function ChannelsPage() {
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     {/* Channel Info */}
                     <div className="flex items-center gap-4">
-                      <div
-                        className={`h-12 w-12 rounded-lg flex items-center justify-center ${
-                          uc.paused
-                            ? "bg-red-900/30 text-red-400"
-                            : "bg-emerald-900/30 text-emerald-400"
-                        }`}
-                      >
-                        <Radio className="h-6 w-6" />
-                      </div>
+                      {uc.channel.channelPhoto ? (
+                        <img
+                          src={uc.channel.channelPhoto}
+                          alt={uc.channel.channelName || "Kanal"}
+                          className="h-12 w-12 rounded-lg object-cover"
+                        />
+                      ) : (
+                        <div
+                          className={`h-12 w-12 rounded-lg flex items-center justify-center ${
+                            uc.paused
+                              ? "bg-red-900/30 text-red-400"
+                              : "bg-emerald-900/30 text-emerald-400"
+                          }`}
+                        >
+                          <Radio className="h-6 w-6" />
+                        </div>
+                      )}
                       <div>
                         <h3 className="text-lg font-medium text-white">
                           {uc.channel.channelName || `Kanal ${uc.channelId}`}
@@ -182,14 +233,14 @@ export default function ChannelsPage() {
                         <Switch
                           checked={!uc.paused}
                           onCheckedChange={() => togglePause(uc.channelId, uc.paused)}
-                          disabled={isUpdating}
+                          disabled={isUpdating || !canToggle}
                         />
                       </div>
                     </div>
                   </div>
 
                   {/* Stats */}
-                  <div className="mt-6 grid grid-cols-3 gap-4">
+                  <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="rounded-lg bg-zinc-950 border border-zinc-800 p-4">
                       <div className="flex items-center gap-2 text-zinc-400 mb-1">
                         <BarChart3 className="h-4 w-4" />
@@ -217,6 +268,15 @@ export default function ChannelsPage() {
                         {stats.monthCount}
                       </p>
                     </div>
+                    <div className="rounded-lg bg-zinc-950 border border-zinc-800 p-4">
+                      <div className="flex items-center gap-2 text-zinc-400 mb-1">
+                        <BarChart3 className="h-4 w-4" />
+                        <span className="text-xs">Toplam</span>
+                      </div>
+                      <p className="text-2xl font-bold text-white">
+                        {stats.totalCount}
+                      </p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -226,7 +286,7 @@ export default function ChannelsPage() {
       )}
 
       {/* Bulk Actions */}
-      {userChannels.length > 1 && (
+      {userChannels.length > 1 && userInfo?.botEnabled && (
         <Card className="border-zinc-800 bg-zinc-900">
           <CardHeader>
             <CardTitle className="text-white text-base">Toplu İşlemler</CardTitle>
