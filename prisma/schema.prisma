@@ -9,13 +9,18 @@ datasource db {
 
 // Kullanıcı sistemi
 model User {
-  id          Int      @id @default(autoincrement())
-  username    String   @unique
-  password    String
-  displayName String?  @map("display_name")
-  role        String   @default("user") // "superadmin" veya "user"
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id           Int       @id @default(autoincrement())
+  username     String    @unique
+  password     String
+  displayName  String?   @map("display_name")
+  role         String    @default("user") // "superadmin" veya "user"
+  isActive     Boolean   @default(true) @map("is_active")      // Hesap aktif mi?
+  isBanned     Boolean   @default(false) @map("is_banned")     // Kullanıcı banlandı mı?
+  bannedAt     DateTime? @map("banned_at")                      // Ban tarihi
+  bannedReason String?   @map("banned_reason")                  // Ban sebebi
+  botEnabled   Boolean   @default(false) @map("bot_enabled")   // Bot bu kullanıcı için aktif mi? (varsayılan KAPALI)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
   // İlişkiler
   channels   UserChannel[]
@@ -29,7 +34,7 @@ model UserChannel {
   id        Int     @id @default(autoincrement())
   userId    Int     @map("user_id")
   channelId BigInt  @map("channel_id")
-  paused    Boolean @default(false)
+  paused    Boolean @default(true)  // Varsayılan KAPALI - kullanıcı açmalı
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   channel Channel @relation(fields: [channelId], references: [channelId], onDelete: Cascade)
@@ -42,6 +47,8 @@ model UserChannel {
 model Channel {
   channelId   BigInt   @id @map("channel_id")
   channelName String?  @map("channel_name")
+  isJoined    Boolean  @default(false) @map("is_joined")  // Bot bu kanala katıldı mı?
+  joinError   String?  @map("join_error")                  // Katılım hatası varsa
   createdAt   DateTime @default(now()) @map("created_at")
 
   userChannels UserChannel[]
@@ -52,12 +59,13 @@ model Channel {
 
 // Dinleme kanalları
 model ListeningChannel {
-  channelId   BigInt  @id @map("channel_id")
-  channelName String? @map("channel_name")
-  defaultLink String  @default("https://example.com") @map("default_link")
-  keyword     String  @default("")
-  type        String  @default("text")
-  triggers    String  @default("")
+  channelId   BigInt   @id @map("channel_id")
+  channelName String?  @map("channel_name")
+  defaultLink String   @default("https://example.com") @map("default_link")
+  keyword     String   @default("")
+  type        String   @default("text")
+  triggers    String   @default("")
+  isActive    Boolean  @default(false) @map("is_active")  // Varsayılan KAPALI
 
   @@map("listening_channels")
 }
@@ -122,4 +130,27 @@ model BannedWord {
   word String @unique
 
   @@map("banned_words")
+}
+
+// Bot durumu ve logları
+model BotStatus {
+  id          Int      @id @default(autoincrement())
+  isRunning   Boolean  @default(false) @map("is_running")
+  lastPing    DateTime? @map("last_ping")
+  lastError   String?  @map("last_error")
+  startedAt   DateTime? @map("started_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("bot_status")
+}
+
+// Bot logları
+model BotLog {
+  id        Int      @id @default(autoincrement())
+  level     String   @default("info") // info, warning, error
+  message   String
+  details   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("bot_logs")
 }
