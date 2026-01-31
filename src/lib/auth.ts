@@ -71,7 +71,6 @@ export async function getCurrentUser() {
       username: true,
       displayName: true,
       role: true,
-      telegramId: true,
       createdAt: true,
     },
   });
@@ -110,7 +109,6 @@ export async function getEffectiveUser() {
         username: true,
         displayName: true,
         role: true,
-        telegramId: true,
         createdAt: true,
       },
     });
