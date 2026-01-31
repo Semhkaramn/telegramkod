@@ -9,9 +9,9 @@ const JWT_SECRET = new TextEncoder().encode(
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Public paths
-  const publicPaths = ["/login", "/api/auth/login"];
-  if (publicPaths.some((path) => pathname.startsWith(path))) {
+  // Public paths - login sayfaları ve API auth
+  const publicPaths = ["/login", "/admin/login", "/api/auth/login"];
+  if (publicPaths.some((path) => pathname === path || pathname.startsWith(path + "/"))) {
     return NextResponse.next();
   }
 
@@ -24,7 +24,12 @@ export async function middleware(request: NextRequest) {
   const token = request.cookies.get("session")?.value;
 
   if (!token) {
-    // Not authenticated, redirect to login
+    // Not authenticated - admin sayfasına gitmek istiyorsa admin login'e yonlendir
+    if (pathname.startsWith("/admin")) {
+      const loginUrl = new URL("/admin/login", request.url);
+      return NextResponse.redirect(loginUrl);
+    }
+    // Normal sayfalar icin login'e yonlendir
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("from", pathname);
     return NextResponse.redirect(loginUrl);
@@ -33,9 +38,8 @@ export async function middleware(request: NextRequest) {
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET);
     const role = payload.role as string;
-    const userId = payload.userId as number;
 
-    // Admin routes - only superadmin
+    // Admin routes - only superadmin can access
     if (pathname.startsWith("/admin")) {
       if (role !== "superadmin") {
         return NextResponse.redirect(new URL("/dashboard", request.url));
@@ -46,7 +50,6 @@ export async function middleware(request: NextRequest) {
     if (pathname.startsWith("/dashboard")) {
       // Kullanıcının ban ve aktiflik durumu API seviyesinde kontrol ediliyor
       // Middleware'de sadece token geçerliliği kontrol edilir
-      // Eğer kullanıcı banlıysa, API çağrılarında 403 dönecek
     }
 
     // Root path - redirect based on role
@@ -60,7 +63,14 @@ export async function middleware(request: NextRequest) {
 
     return NextResponse.next();
   } catch (error) {
-    // Invalid token, redirect to login
+    // Invalid token - admin sayfasına gitmek istiyorsa admin login'e yonlendir
+    if (pathname.startsWith("/admin")) {
+      const loginUrl = new URL("/admin/login", request.url);
+      const response = NextResponse.redirect(loginUrl);
+      response.cookies.delete("session");
+      return response;
+    }
+    // Normal sayfalar icin login'e yonlendir
     const loginUrl = new URL("/login", request.url);
     const response = NextResponse.redirect(loginUrl);
     response.cookies.delete("session");
