@@ -3,11 +3,12 @@ import re
 import psycopg2
 import os
 from telethon import TelegramClient, events
-from telethon.errors import FloodWaitError, ChannelPrivateError, ChatAdminRequiredError, UserBannedInChannelError
+from telethon.errors import FloodWaitError, ChannelPrivateError, ChatAdminRequiredError
 from telethon.tl import functions
 from telethon.sessions import StringSession
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
+import httpx
 
 # —————— AYARLAR ——————
 # Heroku Config Vars'tan alınacak
@@ -15,6 +16,7 @@ api_id = int(os.getenv('API_ID', '0'))
 api_hash = os.getenv('API_HASH', '')
 DATABASE_URL = os.getenv('DATABASE_URL')
 SESSION_STRING = os.getenv('SESSION_STRING', '')
+BOT_TOKEN = os.getenv('BOT_TOKEN', '')  # Telegram Bot Token (kod göndermek için)
 
 # Gerekli değişkenleri kontrol et
 if not api_id or not api_hash:
@@ -24,9 +26,14 @@ if not DATABASE_URL:
     print("❌ HATA: DATABASE_URL environment variable'ı ayarlanmalı!")
 if not SESSION_STRING:
     print("⚠️ UYARI: SESSION_STRING ayarlanmamış. Heroku'da çalışmaz!")
+if not BOT_TOKEN:
+    print("❌ HATA: BOT_TOKEN ayarlanmamış! Kodlar kanallara gönderilemez!")
 
 # Timezone
 istanbul_tz = pytz.timezone('Europe/Istanbul')
+
+# Telegram Bot API base URL
+TELEGRAM_BOT_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 # —————— VERİTABANI ——————
 def get_db_connection():
@@ -281,7 +288,7 @@ def update_bot_status(is_running: bool, error: str = None):
     except Exception as e:
         print(f"⚠️ Status güncelleme hatası: {e}")
 
-# —————— KANALA KATILMA ——————
+# —————— KANALA KATILMA (SADECE DİNLEME İÇİN) ——————
 def is_channel_joined(channel_id: int) -> bool:
     """Kanala daha önce katılınmış mı?"""
     with get_db_connection() as db:
@@ -300,13 +307,63 @@ def mark_channel_joined(channel_id: int):
         """, (channel_id,))
         db.commit()
 
-# —————— TELETHON CLIENT ——————
+# —————— TELETHON CLIENT (SADECE DİNLEME İÇİN) ——————
 if SESSION_STRING:
     client = TelegramClient(StringSession(SESSION_STRING), api_id, api_hash)
-    print("✅ StringSession ile başlatılıyor...")
+    print("✅ Telethon: StringSession ile başlatılıyor (SADECE DİNLEME)...")
 else:
     client = TelegramClient('bot_session', api_id, api_hash)
-    print("⚠️ Dosya session ile başlatılıyor (sadece yerel test için)...")
+    print("⚠️ Telethon: Dosya session ile başlatılıyor (sadece yerel test için)...")
+
+# —————— HTTP CLIENT (BOT API İÇİN) ——————
+http_client = httpx.AsyncClient(timeout=30.0)
+
+# —————— TELEGRAM BOT API FONKSİYONLARI ——————
+async def send_message_via_bot(chat_id: int, text: str) -> dict:
+    """Telegram Bot API ile mesaj gönder"""
+    if not BOT_TOKEN:
+        print("❌ BOT_TOKEN ayarlanmamış!")
+        return {"ok": False, "error": "BOT_TOKEN not set"}
+
+    try:
+        url = f"{TELEGRAM_BOT_API}/sendMessage"
+        payload = {
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "Markdown",
+            "disable_web_page_preview": True
+        }
+
+        response = await http_client.post(url, json=payload)
+        result = response.json()
+
+        if not result.get("ok"):
+            error_desc = result.get("description", "Unknown error")
+            print(f"❌ Bot API hatası ({chat_id}): {error_desc}")
+            return {"ok": False, "error": error_desc}
+
+        return {"ok": True}
+
+    except Exception as e:
+        print(f"❌ HTTP hatası ({chat_id}): {e}")
+        return {"ok": False, "error": str(e)}
+
+async def check_bot_in_channel(chat_id: int) -> dict:
+    """Bot'un kanalda olup olmadığını kontrol et"""
+    if not BOT_TOKEN:
+        return {"ok": False, "error": "BOT_TOKEN not set"}
+
+    try:
+        url = f"{TELEGRAM_BOT_API}/getChat"
+        payload = {"chat_id": chat_id}
+
+        response = await http_client.post(url, json=payload)
+        result = response.json()
+
+        return result
+
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 # —————— YARDIMCI FONKSİYONLAR ——————
 def normalize_channel_id(channel_id: int) -> int:
@@ -315,8 +372,8 @@ def normalize_channel_id(channel_id: int) -> int:
         return int(f"-100{channel_id}")
     return channel_id
 
-async def join_channel_if_needed(channel_id: int, is_target: bool = False) -> bool:
-    """Kanala henüz katılmamışsa katıl"""
+async def join_listening_channel_if_needed(channel_id: int) -> bool:
+    """Dinleme kanalına Telethon ile katıl (sadece dinleme için)"""
     try:
         if is_channel_joined(channel_id):
             return True
@@ -326,60 +383,59 @@ async def join_channel_if_needed(channel_id: int, is_target: bool = False) -> bo
             await client(functions.channels.JoinChannelRequest(channel_id))
             mark_channel_joined(channel_id)
 
-            # Hedef kanal ise veritabanını güncelle
-            if is_target:
-                update_channel_join_status(channel_id, True)
-
-            print(f"📥 Kanala katıldı: {channel_id}")
-            log_bot_message("info", f"Kanala katıldı: {channel_id}")
+            print(f"📥 [Telethon] Dinleme kanalına katıldı: {channel_id}")
+            log_bot_message("info", f"Dinleme kanalına katıldı: {channel_id}")
             return True
 
         except ChannelPrivateError:
             error_msg = "Kanal özel veya davet gerekli"
             print(f"⚠️ {error_msg}: {channel_id}")
-            if is_target:
-                update_channel_join_status(channel_id, False, error_msg)
-            log_bot_message("warning", f"Kanala katılamadı: {channel_id}", error_msg)
+            log_bot_message("warning", f"Dinleme kanalına katılamadı: {channel_id}", error_msg)
             return False
 
         except ChatAdminRequiredError:
             error_msg = "Admin yetkisi gerekli"
             print(f"⚠️ {error_msg}: {channel_id}")
-            if is_target:
-                update_channel_join_status(channel_id, False, error_msg)
-            log_bot_message("warning", f"Kanala katılamadı: {channel_id}", error_msg)
+            log_bot_message("warning", f"Dinleme kanalına katılamadı: {channel_id}", error_msg)
             return False
 
         except Exception as e:
             error_msg = str(e)[:200]
-            print(f"⚠️ Kanala katılamadı {channel_id}: {e}")
-            if is_target:
-                update_channel_join_status(channel_id, False, error_msg)
-            log_bot_message("error", f"Kanal katılım hatası: {channel_id}", error_msg)
+            print(f"⚠️ Dinleme kanalına katılamadı {channel_id}: {e}")
+            log_bot_message("error", f"Dinleme kanal katılım hatası: {channel_id}", error_msg)
             return False
 
     except Exception as e:
-        print(f"⚠️ Kanal katılım hatası {channel_id}: {e}")
+        print(f"⚠️ Dinleme kanal katılım hatası {channel_id}: {e}")
         return False
 
-async def check_and_join_new_channels():
-    """Yeni eklenen hedef kanallara katıl"""
+async def verify_bot_in_target_channels():
+    """Bot'un hedef kanallarda olup olmadığını kontrol et"""
     try:
         target_channels = get_all_target_channels()
 
         for channel_id, is_joined in target_channels:
-            if not is_joined:
-                print(f"🔄 Yeni hedef kanal tespit edildi: {channel_id}")
-                await join_channel_if_needed(channel_id, is_target=True)
-                await asyncio.sleep(1)  # Rate limit için bekle
+            result = await check_bot_in_channel(channel_id)
+
+            if result.get("ok"):
+                if not is_joined:
+                    update_channel_join_status(channel_id, True)
+                    print(f"✅ [Bot] Kanal doğrulandı: {channel_id}")
+            else:
+                error = result.get("error", "Unknown")
+                if is_joined:
+                    update_channel_join_status(channel_id, False, f"Bot kanalda değil: {error}")
+                print(f"⚠️ [Bot] Kanal erişilemiyor: {channel_id} - {error}")
+
+            await asyncio.sleep(0.5)  # Rate limit için bekle
 
     except Exception as e:
-        print(f"❌ Yeni kanal kontrol hatası: {e}")
-        log_bot_message("error", "Yeni kanal kontrol hatası", str(e)[:500])
+        print(f"❌ Hedef kanal kontrol hatası: {e}")
+        log_bot_message("error", "Hedef kanal kontrol hatası", str(e)[:500])
 
-# —————— KOD GÖNDERİM ——————
+# —————— KOD GÖNDERİM (TELEGRAM BOT API İLE) ——————
 async def send_to_all_channels(code: str, default_link: str):
-    """Kodu tüm aktif kanallara gönder (sadece aktif ve ban olmayan kullanıcıların kanallarına)"""
+    """Kodu tüm aktif kanallara TELEGRAM BOT ile gönder"""
     try:
         active_channels = get_active_channels()
 
@@ -402,24 +458,24 @@ async def send_to_all_channels(code: str, default_link: str):
                 final_link = get_link_for_channel(channel_id, code, default_link)
                 message = f"`{code}`\n\n{final_link}"
 
-                await client.send_message(channel_id, message, link_preview=False)
+                # Telegram Bot API ile gönder
+                result = await send_message_via_bot(channel_id, message)
 
-                # İstatistik kaydet
-                record_code_stat(channel_id, code)
+                if result.get("ok"):
+                    # İstatistik kaydet
+                    record_code_stat(channel_id, code)
+                    sent_count += 1
+                else:
+                    error_count += 1
+                    error_msg = result.get("error", "Unknown")
 
-                sent_count += 1
-                await asyncio.sleep(0.1)  # Rate limit için kısa bekleme
+                    # Bot kanalda değilse veritabanını güncelle
+                    if "chat not found" in error_msg.lower() or "bot is not a member" in error_msg.lower():
+                        update_channel_join_status(channel_id, False, error_msg)
 
-            except UserBannedInChannelError:
-                error_count += 1
-                print(f"❌ Bot bu kanalda banlı: {channel_id}")
-                update_channel_join_status(channel_id, False, "Bot bu kanalda banlı")
-                log_bot_message("error", f"Bot kanalda banlı: {channel_id}")
+                    log_bot_message("error", f"Gönderim hatası: {channel_id}", error_msg)
 
-            except FloodWaitError as e:
-                print(f"⚠️ FloodWait: {e.seconds} saniye bekleniyor...")
-                log_bot_message("warning", f"FloodWait: {e.seconds} saniye")
-                await asyncio.sleep(e.seconds)
+                await asyncio.sleep(0.05)  # Rate limit için kısa bekleme
 
             except Exception as e:
                 error_count += 1
@@ -427,7 +483,7 @@ async def send_to_all_channels(code: str, default_link: str):
                 log_bot_message("error", f"Gönderim hatası: {channel_id}", str(e)[:200])
 
         if sent_count > 0:
-            print(f"✅ Dağıtım: {sent_count}/{len(active_channels)} kanal | Kod: {code}")
+            print(f"✅ [Bot API] Dağıtım: {sent_count}/{len(active_channels)} kanal | Kod: {code}")
             log_bot_message("info", f"Kod dağıtıldı: {code}", f"{sent_count} kanal başarılı, {error_count} hata")
             cleanup_old_codes()
 
@@ -437,7 +493,7 @@ async def send_to_all_channels(code: str, default_link: str):
 
 # —————— MESAJ İŞLEME ——————
 async def process_message(event, listening_channel_id: int, default_link: str, keyword: str):
-    """Mesajı işle ve kod varsa gönder"""
+    """Mesajı işle ve kod varsa TELEGRAM BOT ile gönder"""
     try:
         text = event.message.message.strip()
         if not text:
@@ -518,10 +574,10 @@ async def process_message(event, listening_channel_id: int, default_link: str, k
         print(f"❌ Mesaj işleme hatası: {e}")
         log_bot_message("error", "Mesaj işleme hatası", str(e)[:500])
 
-# —————— ANA DİNLEYİCİ ——————
+# —————— ANA DİNLEYİCİ (TELETHON) ——————
 @client.on(events.NewMessage())
 async def message_handler(event):
-    """Tüm mesajları dinle"""
+    """Tüm mesajları Telethon ile dinle"""
     try:
         if not event.chat:
             return
@@ -529,7 +585,7 @@ async def message_handler(event):
         current_channel_id = event.chat.id
         normalized_id = normalize_channel_id(current_channel_id)
 
-        # Aktif dinleme kanallarını kontrol et (sadece is_active=true olanlar)
+        # Aktif dinleme kanallarını kontrol et
         listening_channels = get_listening_channels()
 
         for lc_id, default_link, keyword, lc_type, triggers in listening_channels:
@@ -542,15 +598,15 @@ async def message_handler(event):
 
 # —————— KEEP ALIVE & SYNC ——————
 async def keep_alive():
-    """Bot'u canlı tut, eski kodları temizle ve yeni kanalları kontrol et"""
+    """Bot'u canlı tut, eski kodları temizle ve kanalları kontrol et"""
     while True:
         try:
             await client.get_me()
             cleanup_old_codes()
             update_bot_status(True)
 
-            # Her 5 dakikada bir yeni kanalları kontrol et
-            await check_and_join_new_channels()
+            # Her 5 dakikada bir hedef kanalları kontrol et
+            await verify_bot_in_target_channels()
 
         except Exception as e:
             print(f"⚠️ Keep alive hatası: {e}")
@@ -561,31 +617,53 @@ async def keep_alive():
 # —————— BAŞLANGIÇ ——————
 async def main():
     """Bot'u başlat"""
-    print("🤖 Telegram Bot başlatılıyor...")
-    print("📋 Mod: Sadece kod dinleme ve iletme (komut yok)")
-    print("🌐 Yönetim: Web panelinden yapılacak")
-    print("🔒 Güvenlik: Sadece aktif ve ban olmayan kullanıcılar")
-    print("-" * 50)
+    print("=" * 60)
+    print("🤖 Telegram Kod Botu v2.0 başlatılıyor...")
+    print("=" * 60)
+    print("📋 Mimari:")
+    print("   • Telethon (Kişisel Hesap) → Sadece DINLEME")
+    print("   • Telegram Bot API → Kod GÖNDERME")
+    print("-" * 60)
+    print("⚠️ ÖNEMLİ: Bot'u hedef kanallara ADMIN olarak ekleyin!")
+    print("-" * 60)
 
     try:
+        # Telethon client başlat (dinleme için)
         await client.start()
         update_bot_status(True)
-        log_bot_message("info", "Bot başlatıldı")
+        log_bot_message("info", "Bot başlatıldı (v2.0 - Ayrılmış Mimari)")
 
         me = await client.get_me()
-        print(f"✅ Giriş yapıldı: {me.first_name} (@{me.username})")
+        print(f"✅ [Telethon] Giriş yapıldı: {me.first_name} (@{me.username})")
 
-        # Aktif dinleme kanallarına katıl
+        # Bot token kontrol
+        if BOT_TOKEN:
+            # Bot bilgilerini al
+            try:
+                bot_info_url = f"{TELEGRAM_BOT_API}/getMe"
+                response = await http_client.get(bot_info_url)
+                bot_data = response.json()
+                if bot_data.get("ok"):
+                    bot_username = bot_data["result"].get("username", "Unknown")
+                    print(f"✅ [Bot API] Bot aktif: @{bot_username}")
+                else:
+                    print(f"❌ [Bot API] Bot doğrulanamadı: {bot_data}")
+            except Exception as e:
+                print(f"❌ [Bot API] Bağlantı hatası: {e}")
+        else:
+            print("❌ [Bot API] BOT_TOKEN ayarlanmamış!")
+
+        # Dinleme kanallarına Telethon ile katıl
         listening_channels = get_listening_channels()
-        print(f"📡 Aktif dinleme kanalları: {len(listening_channels)}")
+        print(f"\n📡 Dinleme kanalları: {len(listening_channels)}")
 
         for channel_id, default_link, keyword, lc_type, triggers in listening_channels:
-            await join_channel_if_needed(channel_id)
+            await join_listening_channel_if_needed(channel_id)
             await asyncio.sleep(0.5)
 
-        # Hedef kanalları kontrol et ve katıl
-        print("🔄 Hedef kanallar kontrol ediliyor...")
-        await check_and_join_new_channels()
+        # Hedef kanalları kontrol et (Bot API ile)
+        print(f"\n🔄 Hedef kanallar kontrol ediliyor...")
+        await verify_bot_in_target_channels()
 
         # Aktif hedef kanalları göster
         active_channels = get_active_channels()
@@ -594,9 +672,11 @@ async def main():
         # Keep alive task başlat
         asyncio.create_task(keep_alive())
 
-        print("-" * 50)
-        print("🚀 Bot çalışıyor - Kodlar dinleniyor...")
-        print("⚠️ Not: Sadece bot_enabled=true olan kullanıcıların kanallarına kod gönderilir")
+        print("-" * 60)
+        print("🚀 Bot çalışıyor!")
+        print("   • Telethon dinliyor...")
+        print("   • Kodlar Bot API ile gönderiliyor...")
+        print("=" * 60)
 
         await client.run_until_disconnected()
 
@@ -606,6 +686,7 @@ async def main():
         log_bot_message("error", "Bot hatası", str(e)[:500])
     finally:
         update_bot_status(False)
+        await http_client.aclose()
         await client.disconnect()
 
 if __name__ == "__main__":
