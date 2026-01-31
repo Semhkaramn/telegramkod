@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAllKeywords, addKeyword, removeKeyword } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { invalidateCache } from "@/lib/cache";
 
 export async function GET() {
   try {
@@ -32,6 +33,7 @@ export async function POST(request: NextRequest) {
     }
 
     await addKeyword(keyword);
+    await invalidateCache();
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error adding keyword:", error);
@@ -54,6 +56,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     await removeKeyword(Number(id));
+    await invalidateCache();
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error removing keyword:", error);
