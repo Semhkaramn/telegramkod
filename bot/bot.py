@@ -10,10 +10,20 @@ from datetime import datetime, timedelta
 import pytz
 
 # —————— AYARLAR ——————
-api_id = int(os.getenv('API_ID', '23134050'))
-api_hash = os.getenv('API_HASH', 'a03e2a029f42a96707c9555c5eee95ae')
+# Heroku Config Vars'tan alınacak
+api_id = int(os.getenv('API_ID', '0'))
+api_hash = os.getenv('API_HASH', '')
 DATABASE_URL = os.getenv('DATABASE_URL')
 SESSION_STRING = os.getenv('SESSION_STRING', '')
+
+# Gerekli değişkenleri kontrol et
+if not api_id or not api_hash:
+    print("❌ HATA: API_ID ve API_HASH environment variable'ları ayarlanmalı!")
+    print("   Heroku Dashboard > Settings > Config Vars")
+if not DATABASE_URL:
+    print("❌ HATA: DATABASE_URL environment variable'ı ayarlanmalı!")
+if not SESSION_STRING:
+    print("⚠️ UYARI: SESSION_STRING ayarlanmamış. Heroku'da çalışmaz!")
 
 # Timezone
 istanbul_tz = pytz.timezone('Europe/Istanbul')
