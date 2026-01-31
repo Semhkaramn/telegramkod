@@ -14,7 +14,8 @@ export async function GET(request: NextRequest) {
     const userId = searchParams.get("user_id");
 
     // Superadmin can view any user's links
-    let targetUserId = session.userId;
+    // Impersonation durumunda taklit edilen kullanıcının linklerini göster
+    let targetUserId = session.impersonatingUserId || session.userId;
     if (userId && session.role === "superadmin") {
       targetUserId = parseInt(userId);
     }
@@ -58,7 +59,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Superadmin can add links for any user
-    let targetUserId = session.userId;
+    // Impersonation durumunda taklit edilen kullanıcı için link ekle
+    let targetUserId = session.impersonatingUserId || session.userId;
     if (user_id && session.role === "superadmin") {
       targetUserId = parseInt(user_id);
     }
