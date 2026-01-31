@@ -38,7 +38,9 @@ export async function getAllChannels() {
     channel_id: channel.channelId.toString(),
     channel_name: channel.channelName,
     created_at: channel.createdAt,
-    paused: channel.userChannels.some((uc) => uc.paused),
+    // Kanalın pause durumu: Tüm kullanıcılar durdurulmuşsa durdurulmuş sayılır
+    // Eğer hiç kullanıcı atanmamışsa veya en az bir kullanıcı aktifse, kanal aktiftir
+    paused: channel.userChannels.length > 0 && channel.userChannels.every((uc) => uc.paused),
     users: channel.userChannels.map((uc) => ({
       id: uc.user.id,
       username: uc.user.username,
