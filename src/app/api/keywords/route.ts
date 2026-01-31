@@ -31,13 +31,13 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const keyword = searchParams.get("keyword");
+    const id = searchParams.get("id");
 
-    if (!keyword) {
-      return NextResponse.json({ error: "keyword is required" }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
 
-    await removeKeyword(keyword);
+    await removeKeyword(Number(id));
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error removing keyword:", error);
