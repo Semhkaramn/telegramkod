@@ -14,7 +14,6 @@ export async function GET() {
       select: {
         id: true,
         username: true,
-        displayName: true,
         role: true,
         isActive: true,
         isBanned: true,
@@ -38,6 +37,7 @@ export async function GET() {
 }
 
 // POST - Yeni kullanıcı oluştur (superadmin only)
+// Her zaman normal kullanıcı olarak oluşturulur (role: "user")
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession();
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { username, password, displayName, role } = body;
+    const { username, password } = body;
 
     if (!username || !password) {
       return NextResponse.json(
@@ -70,12 +70,12 @@ export async function POST(request: NextRequest) {
     // Şifreyi hash'le
     const hashedPassword = await hashPassword(password);
 
+    // Her zaman normal kullanıcı olarak oluştur (süper admin panelden eklenemez)
     const user = await prisma.user.create({
       data: {
         username,
         password: hashedPassword,
-        displayName: displayName || username,
-        role: role || "user",
+        role: "user",        // Her zaman normal kullanıcı
         isActive: true,      // Yeni kullanıcı aktif
         isBanned: false,     // Yeni kullanıcı banlı değil
         botEnabled: false,   // Bot varsayılan KAPALI - süper admin açmalı
@@ -83,7 +83,6 @@ export async function POST(request: NextRequest) {
       select: {
         id: true,
         username: true,
-        displayName: true,
         role: true,
         isActive: true,
         isBanned: true,
