@@ -15,6 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Radio, Plus } from "lucide-react";
 
 interface Channel {
   channel_id: string;
@@ -70,7 +71,6 @@ export default function ChannelsPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    // İlk yüklenişte kanalları Telegram'dan güncelle
     fetchData(true);
   }, []);
 
@@ -94,7 +94,6 @@ export default function ChannelsPage() {
     }
   };
 
-  // Telegram'dan kanal bilgisi al
   const fetchChannelPreview = async () => {
     if (!channelInput.trim()) return;
 
@@ -125,11 +124,9 @@ export default function ChannelsPage() {
     setSubmitting(true);
 
     try {
-      // Önce kanal bilgisini al (eğer henüz alınmamışsa)
       let channelId = channelInput.trim();
       let channelName = channelPreview?.title || null;
 
-      // Eğer preview varsa, preview'daki ID'yi kullan
       if (channelPreview) {
         channelId = channelPreview.id;
         channelName = channelPreview.title;
@@ -146,7 +143,7 @@ export default function ChannelsPage() {
 
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || "Bir hata olustu");
+        setError(data.error || "Bir hata oluştu");
         setSubmitting(false);
         return;
       }
@@ -157,14 +154,14 @@ export default function ChannelsPage() {
       setPreviewError("");
       fetchData();
     } catch (error) {
-      setError("Baglantı hatası");
+      setError("Bağlantı hatası");
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = async (channelId: string) => {
-    if (!confirm("Bu kanalı silmek istediginizden emin misiniz?")) return;
+    if (!confirm("Bu kanalı silmek istediğinizden emin misiniz?")) return;
 
     try {
       const res = await fetch(`/api/channels?channel_id=${channelId}`, {
@@ -235,10 +232,10 @@ export default function ChannelsPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <Skeleton className="h-8 w-48 bg-zinc-800" />
+        <Skeleton className="h-8 w-48 bg-slate-800" />
         <div className="grid gap-4">
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-32 bg-zinc-800" />
+            <Skeleton key={i} className="h-32 bg-slate-800" />
           ))}
         </div>
       </div>
@@ -249,23 +246,23 @@ export default function ChannelsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-100">Kanallar</h1>
-          <p className="text-zinc-400">Hedef kanalları yonetin</p>
+          <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
+            <Radio className="h-7 w-7 text-blue-500" />
+            Kanallar
+          </h1>
+          <p className="text-slate-400 mt-1">Hedef kanalları yönetin</p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={openAddDialog} className="bg-zinc-100 text-zinc-900 hover:bg-zinc-200">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
-                <line x1="12" x2="12" y1="5" y2="19" />
-                <line x1="5" x2="19" y1="12" y2="12" />
-              </svg>
+            <Button onClick={openAddDialog} className="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white shadow-lg shadow-blue-500/25">
+              <Plus className="mr-2 h-4 w-4" />
               Yeni Kanal
             </Button>
           </DialogTrigger>
-          <DialogContent className="bg-zinc-900 border-zinc-800 max-w-md">
+          <DialogContent className="bg-slate-900 border-slate-700 max-w-md">
             <DialogHeader>
-              <DialogTitle className="text-zinc-100">Yeni Kanal Ekle</DialogTitle>
-              <DialogDescription className="text-zinc-400">
+              <DialogTitle className="text-slate-100">Yeni Kanal Ekle</DialogTitle>
+              <DialogDescription className="text-slate-400">
                 Kanal ID veya kullanıcı adı girin. Bot otomatik olarak kanal bilgilerini alacak.
               </DialogDescription>
             </DialogHeader>
@@ -277,7 +274,7 @@ export default function ChannelsPage() {
               )}
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300">Kanal ID veya Kullanıcı Adı</label>
+                <label className="text-sm font-medium text-slate-300">Kanal ID veya Kullanıcı Adı</label>
                 <div className="flex gap-2">
                   <Input
                     value={channelInput}
@@ -286,7 +283,7 @@ export default function ChannelsPage() {
                       setChannelPreview(null);
                       setPreviewError("");
                     }}
-                    className="bg-zinc-800 border-zinc-700 text-zinc-100 flex-1"
+                    className="bg-slate-800 border-slate-700 text-slate-100 flex-1 focus:border-blue-500"
                     placeholder="-1001234567890 veya @kanaladı"
                     required
                   />
@@ -294,7 +291,7 @@ export default function ChannelsPage() {
                     type="button"
                     onClick={fetchChannelPreview}
                     disabled={fetchingPreview || !channelInput.trim()}
-                    className="bg-zinc-700 hover:bg-zinc-600 text-zinc-100"
+                    className="bg-slate-700 hover:bg-slate-600 text-slate-100"
                   >
                     {fetchingPreview ? (
                       <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -306,21 +303,19 @@ export default function ChannelsPage() {
                     )}
                   </Button>
                 </div>
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-slate-500">
                   Bot'un kanala admin olarak eklenmiş olması gerekir.
                 </p>
               </div>
 
-              {/* Preview Error */}
               {previewError && (
                 <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-400 text-sm">
                   {previewError}
                 </div>
               )}
 
-              {/* Channel Preview */}
               {channelPreview && (
-                <div className="p-4 rounded-lg bg-zinc-800/50 border border-zinc-700">
+                <div className="p-4 rounded-lg bg-slate-800/50 border border-slate-700">
                   <div className="flex items-center gap-3">
                     {channelPreview.photoUrl ? (
                       <img
@@ -329,28 +324,25 @@ export default function ChannelsPage() {
                         className="w-12 h-12 rounded-lg object-cover"
                       />
                     ) : (
-                      <div className="w-12 h-12 rounded-lg bg-zinc-700 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-400">
-                          <path d="m22 2-7 20-4-9-9-4Z" />
-                          <path d="M22 2 11 13" />
-                        </svg>
+                      <div className="w-12 h-12 rounded-lg bg-slate-700 flex items-center justify-center">
+                        <Radio className="h-6 w-6 text-slate-400" />
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-zinc-100 truncate">{channelPreview.title}</p>
-                      <p className="text-sm text-zinc-400">
+                      <p className="font-medium text-slate-100 truncate">{channelPreview.title}</p>
+                      <p className="text-sm text-slate-400">
                         {channelPreview.username ? `@${channelPreview.username}` : `ID: ${channelPreview.id}`}
                       </p>
                       {channelPreview.memberCount && (
-                        <p className="text-xs text-zinc-500">{channelPreview.memberCount} üye</p>
+                        <p className="text-xs text-slate-500">{channelPreview.memberCount} üye</p>
                       )}
                     </div>
-                    <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                    <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">
                       Hazır
                     </Badge>
                   </div>
                   {channelPreview.description && (
-                    <p className="text-xs text-zinc-500 mt-2 line-clamp-2">
+                    <p className="text-xs text-slate-500 mt-2 line-clamp-2">
                       {channelPreview.description}
                     </p>
                   )}
@@ -362,14 +354,14 @@ export default function ChannelsPage() {
                   type="button"
                   variant="outline"
                   onClick={() => setDialogOpen(false)}
-                  className="flex-1 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                  className="flex-1 border-slate-700 text-slate-300 hover:bg-slate-800"
                 >
-                  Iptal
+                  İptal
                 </Button>
                 <Button
                   type="submit"
                   disabled={submitting || (!channelPreview && !channelInput.trim())}
-                  className="flex-1 bg-zinc-100 text-zinc-900 hover:bg-zinc-200"
+                  className="flex-1 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white"
                 >
                   {submitting ? "Ekleniyor..." : "Ekle"}
                 </Button>
@@ -382,14 +374,14 @@ export default function ChannelsPage() {
       {/* Channels List */}
       <div className="grid gap-4">
         {channels.length === 0 ? (
-          <Card className="bg-zinc-900 border-zinc-800">
+          <Card className="bg-slate-900/50 border-slate-700/50">
             <CardContent className="py-12 text-center">
-              <p className="text-zinc-500">Henuz kanal yok</p>
+              <p className="text-slate-500">Henüz kanal yok</p>
             </CardContent>
           </Card>
         ) : (
           channels.map((channel) => (
-            <Card key={channel.channel_id} className="bg-zinc-900 border-zinc-800">
+            <Card key={channel.channel_id} className="bg-slate-900/50 border-slate-700/50 backdrop-blur-sm">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -400,31 +392,29 @@ export default function ChannelsPage() {
                         className="w-10 h-10 rounded-lg object-cover"
                       />
                     ) : (
-                      <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-400">
-                          <path d="m22 2-7 20-4-9-9-4Z" />
-                          <path d="M22 2 11 13" />
-                        </svg>
+                      <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
+                        <Radio className="h-5 w-5 text-blue-400" />
                       </div>
                     )}
                     <div>
-                      <CardTitle className="text-zinc-100 text-lg">
+                      <CardTitle className="text-slate-100 text-lg">
                         {channel.channel_name || `Kanal ${channel.channel_id}`}
                       </CardTitle>
-                      <CardDescription className="text-zinc-500">
+                      <CardDescription className="text-slate-500">
                         {channel.channel_username ? `@${channel.channel_username}` : `ID: ${channel.channel_id}`}
-                        {channel.member_count && ` · ${channel.member_count.toLocaleString()} uye`}
+                        {channel.member_count && ` · ${channel.member_count.toLocaleString()} üye`}
                       </CardDescription>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-zinc-400">
+                      <span className="text-sm text-slate-400">
                         {channel.paused ? "Durduruldu" : "Aktif"}
                       </span>
                       <Switch
                         checked={!channel.paused}
                         onCheckedChange={() => handleTogglePause(channel.channel_id, channel.paused)}
+                        className="data-[state=checked]:bg-blue-600"
                       />
                     </div>
                     <Button
@@ -441,36 +431,34 @@ export default function ChannelsPage() {
               <CardContent>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    {/* Stats */}
                     <div className="flex gap-4 text-sm">
-                      <div className="text-zinc-400">
-                        <span className="text-zinc-100 font-medium">{channel.stats?.daily || 0}</span> bugun
+                      <div className="text-slate-400">
+                        <span className="text-slate-100 font-medium">{channel.stats?.daily || 0}</span> bugün
                       </div>
-                      <div className="text-zinc-400">
-                        <span className="text-zinc-100 font-medium">{channel.stats?.weekly || 0}</span> hafta
+                      <div className="text-slate-400">
+                        <span className="text-slate-100 font-medium">{channel.stats?.weekly || 0}</span> hafta
                       </div>
-                      <div className="text-zinc-400">
-                        <span className="text-zinc-100 font-medium">{channel.stats?.monthly || 0}</span> ay
+                      <div className="text-slate-400">
+                        <span className="text-slate-100 font-medium">{channel.stats?.monthly || 0}</span> ay
                       </div>
-                      <div className="text-zinc-400">
-                        <span className="text-zinc-100 font-medium">{channel.stats?.total || 0}</span> toplam
+                      <div className="text-slate-400">
+                        <span className="text-slate-100 font-medium">{channel.stats?.total || 0}</span> toplam
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {/* Assigned Users */}
                     <div className="flex -space-x-2">
                       {channel.users.slice(0, 3).map((user) => (
                         <div
                           key={user.id}
-                          className="w-8 h-8 rounded-full bg-zinc-700 border-2 border-zinc-900 flex items-center justify-center text-xs text-zinc-300"
+                          className="w-8 h-8 rounded-full bg-blue-500/20 border-2 border-slate-900 flex items-center justify-center text-xs text-blue-400"
                           title={user.username}
                         >
                           {user.username[0].toUpperCase()}
                         </div>
                       ))}
                       {channel.users.length > 3 && (
-                        <div className="w-8 h-8 rounded-full bg-zinc-600 border-2 border-zinc-900 flex items-center justify-center text-xs text-zinc-300">
+                        <div className="w-8 h-8 rounded-full bg-slate-600 border-2 border-slate-900 flex items-center justify-center text-xs text-slate-300">
                           +{channel.users.length - 3}
                         </div>
                       )}
@@ -483,62 +471,57 @@ export default function ChannelsPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                          className="border-slate-700 text-slate-300 hover:bg-slate-800"
                         >
                           Kullanıcı Ata
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="bg-zinc-900 border-zinc-800">
+                      <DialogContent className="bg-slate-900 border-slate-700">
                         <DialogHeader>
-                          <DialogTitle className="text-zinc-100">Kullanıcı Ata</DialogTitle>
-                          <DialogDescription className="text-zinc-400">
+                          <DialogTitle className="text-slate-100">Kullanıcı Ata</DialogTitle>
+                          <DialogDescription className="text-slate-400">
                             Bu kanala kullanıcı atayın
                           </DialogDescription>
                         </DialogHeader>
                         <div className="space-y-3 mt-4">
-                          {/* Current Users */}
                           {channel.users.length > 0 && (
-                            <div className="space-y-2 pb-4 border-b border-zinc-800">
-                              <p className="text-sm text-zinc-400">Atanmıs Kullanıcılar</p>
+                            <div className="space-y-2 pb-4 border-b border-slate-800">
+                              <p className="text-sm text-slate-400">Atanmış Kullanıcılar</p>
                               {channel.users.map((user) => (
-                                <div key={user.id} className="flex items-center justify-between p-2 rounded bg-zinc-800/50">
-                                  <span className="text-zinc-100">{user.username}</span>
+                                <div key={user.id} className="flex items-center justify-between p-2 rounded bg-slate-800/50">
+                                  <span className="text-slate-100">{user.username}</span>
                                   <Button
                                     size="sm"
                                     variant="ghost"
                                     onClick={() => handleRemoveUser(user.id, channel.channel_id)}
                                     className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
                                   >
-                                    Kaldir
+                                    Kaldır
                                   </Button>
                                 </div>
                               ))}
                             </div>
                           )}
-                          {/* Available Users */}
-                          <p className="text-sm text-zinc-400">Mevcut Kullanıcılar</p>
+                          <p className="text-sm text-slate-400">Mevcut Kullanıcılar</p>
                           {users
                             .filter((u: any) => u.role !== "superadmin" && !channel.users.some((cu) => cu.id === u.id))
                             .map((user) => (
                               <div
                                 key={user.id}
-                                className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 transition-colors cursor-pointer"
+                                className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors cursor-pointer"
                                 onClick={() => handleAssignUser(user.id)}
                               >
                                 <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-zinc-300 text-sm">
+                                  <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 text-sm">
                                     {user.username[0].toUpperCase()}
                                   </div>
-                                  <span className="text-zinc-100">{user.username}</span>
+                                  <span className="text-slate-100">{user.username}</span>
                                 </div>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500">
-                                  <line x1="12" x2="12" y1="5" y2="19" />
-                                  <line x1="5" x2="19" y1="12" y2="12" />
-                                </svg>
+                                <Plus className="h-4 w-4 text-slate-500" />
                               </div>
                             ))}
                           {users.filter((u: any) => u.role !== "superadmin" && !channel.users.some((cu) => cu.id === u.id)).length === 0 && (
-                            <p className="text-zinc-500 text-center py-4">Tum kullanıcılar zaten atanmıs</p>
+                            <p className="text-slate-500 text-center py-4">Tüm kullanıcılar zaten atanmış</p>
                           )}
                         </div>
                       </DialogContent>
