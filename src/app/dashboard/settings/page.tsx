@@ -5,24 +5,17 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Settings, Lock, User, Save, Check, X } from "lucide-react";
+import { Settings, Lock, User, Check, X } from "lucide-react";
 
 interface UserProfile {
   id: number;
   username: string;
-  displayName: string | null;
   role: string;
 }
 
 export default function SettingsPage() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // Profile form
-  const [displayName, setDisplayName] = useState("");
-  const [profileSaving, setProfileSaving] = useState(false);
-  const [profileSuccess, setProfileSuccess] = useState(false);
-  const [profileError, setProfileError] = useState("");
 
   // Password form
   const [currentPassword, setCurrentPassword] = useState("");
@@ -41,44 +34,13 @@ export default function SettingsPage() {
       const response = await fetch("/api/auth/me");
       if (response.ok) {
         const data = await response.json();
-        // API /api/auth/me { user: {...} } formatında döner
         const userData = data.user || data;
         setUser(userData);
-        setDisplayName(userData.displayName || "");
       }
     } catch (error) {
       console.error("Error fetching user:", error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleProfileUpdate = async () => {
-    if (!user) return;
-
-    setProfileSaving(true);
-    setProfileError("");
-    setProfileSuccess(false);
-
-    try {
-      const response = await fetch(`/api/users/${user.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ displayName }),
-      });
-
-      if (response.ok) {
-        setProfileSuccess(true);
-        setTimeout(() => setProfileSuccess(false), 3000);
-        fetchUser();
-      } else {
-        const data = await response.json();
-        setProfileError(data.error || "Profil guncellenemedi");
-      }
-    } catch (error) {
-      setProfileError("Bir hata olustu");
-    } finally {
-      setProfileSaving(false);
     }
   };
 
@@ -146,68 +108,27 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Profile Settings */}
+        {/* Account Info */}
         <Card className="border-zinc-800 bg-zinc-900">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
               <User className="h-5 w-5 text-emerald-500" />
-              Profil Bilgileri
+              Hesap Bilgileri
             </CardTitle>
-            <CardDescription className="text-zinc-500">
-              Gorunen adinizi guncelleyin
-            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <label className="text-sm text-zinc-400">Kullanici Adi</label>
-              <Input
-                value={user?.username || ""}
-                disabled
-                className="mt-1 border-zinc-700 bg-zinc-800 text-zinc-500"
-              />
-              <p className="mt-1 text-xs text-zinc-600">
-                Kullanici adi degistirilemez
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
+              <p className="text-sm text-zinc-500">Kullanici Adi</p>
+              <p className="text-lg font-medium text-white">
+                @{user?.username}
               </p>
             </div>
-
-            <div>
-              <label className="text-sm text-zinc-400">Gorunen Ad</label>
-              <Input
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Adinizi girin"
-                className="mt-1 border-zinc-700 bg-zinc-800 text-white"
-              />
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
+              <p className="text-sm text-zinc-500">Hesap Tipi</p>
+              <p className="text-lg font-medium text-white">
+                Kullanici
+              </p>
             </div>
-
-            {profileError && (
-              <div className="flex items-center gap-2 text-sm text-red-400">
-                <X className="h-4 w-4" />
-                {profileError}
-              </div>
-            )}
-
-            {profileSuccess && (
-              <div className="flex items-center gap-2 text-sm text-emerald-400">
-                <Check className="h-4 w-4" />
-                Profil basariyla guncellendi
-              </div>
-            )}
-
-            <Button
-              onClick={handleProfileUpdate}
-              disabled={profileSaving}
-              className="w-full bg-emerald-600 hover:bg-emerald-700"
-            >
-              {profileSaving ? (
-                "Kaydediliyor..."
-              ) : (
-                <>
-                  <Save className="mr-2 h-4 w-4" />
-                  Kaydet
-                </>
-              )}
-            </Button>
           </CardContent>
         </Card>
 
@@ -289,38 +210,6 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Account Info */}
-      <Card className="border-zinc-800 bg-zinc-900">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-white">
-            <Settings className="h-5 w-5 text-emerald-500" />
-            Hesap Bilgileri
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
-              <p className="text-sm text-zinc-500">Kullanici Adi</p>
-              <p className="text-lg font-medium text-white">
-                @{user?.username}
-              </p>
-            </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
-              <p className="text-sm text-zinc-500">Rol</p>
-              <p className="text-lg font-medium text-white">
-                {user?.role === "superadmin" ? "Super Admin" : "Kullanici"}
-              </p>
-            </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
-              <p className="text-sm text-zinc-500">Gorunen Ad</p>
-              <p className="text-lg font-medium text-white">
-                {user?.displayName || "-"}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
