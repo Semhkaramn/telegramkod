@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { invalidateCache } from "@/lib/cache";
 
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
 
@@ -272,6 +273,9 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Cache'i invalidate et - bot yeni kanalı görecek
+    await invalidateCache();
+
     return NextResponse.json({
       success: true,
       channel_id: finalChannelId.toString(),
@@ -303,6 +307,9 @@ export async function DELETE(request: NextRequest) {
       where: { channelId: BigInt(channelId) },
     });
 
+    // Cache'i invalidate et
+    await invalidateCache();
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error removing channel:", error);
@@ -330,6 +337,9 @@ export async function PATCH(request: NextRequest) {
       where: { channelId: BigInt(channel_id) },
       data: { paused: Boolean(paused) },
     });
+
+    // Cache'i invalidate et - pause durumu değişti
+    await invalidateCache();
 
     return NextResponse.json({ success: true });
   } catch (error) {
