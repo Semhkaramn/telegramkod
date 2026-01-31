@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession, hashPassword } from "@/lib/auth";
+import { invalidateCache } from "@/lib/cache";
 
 // GET - Tek kullanıcı detayı
 export async function GET(
