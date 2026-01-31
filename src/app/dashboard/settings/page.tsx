@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Settings, Lock, User, Check, X } from "lucide-react";
+import { Lock, Check, X } from "lucide-react";
 
 interface UserProfile {
   id: number;
@@ -92,10 +92,7 @@ export default function SettingsPage() {
     return (
       <div className="space-y-6">
         <Skeleton className="h-10 w-48 bg-zinc-800" />
-        <div className="grid gap-6 md:grid-cols-2">
-          <Skeleton className="h-64 bg-zinc-800" />
-          <Skeleton className="h-64 bg-zinc-800" />
-        </div>
+        <Skeleton className="h-64 bg-zinc-800 max-w-md mx-auto" />
       </div>
     );
   }
@@ -104,34 +101,10 @@ export default function SettingsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-white">Ayarlar</h1>
-        <p className="text-zinc-400">Hesap ayarlarinizi yonetin</p>
+        <p className="text-zinc-400">Sifrenizi degistirin</p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Account Info */}
-        <Card className="border-zinc-800 bg-zinc-900">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <User className="h-5 w-5 text-emerald-500" />
-              Hesap Bilgileri
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
-              <p className="text-sm text-zinc-500">Kullanici Adi</p>
-              <p className="text-lg font-medium text-white">
-                @{user?.username}
-              </p>
-            </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
-              <p className="text-sm text-zinc-500">Hesap Tipi</p>
-              <p className="text-lg font-medium text-white">
-                Kullanici
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
+      <div className="max-w-md">
         {/* Password Settings */}
         <Card className="border-zinc-800 bg-zinc-900">
           <CardHeader>
