@@ -52,17 +52,22 @@ export default function AdminLayout({
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-zinc-100" />
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="animate-spin rounded-full h-10 w-10 border-2 border-blue-500 border-t-transparent" />
+          <p className="text-sm text-slate-400">Yükleniyor...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950">
+    <div className="min-h-screen bg-slate-950">
       <AdminSidebar user={user} />
-      <main className="ml-64 min-h-screen">
-        <div className="p-6">{children}</div>
+      <main className="min-h-screen pt-20 px-4 pb-8 lg:pt-8 lg:pl-80 lg:pr-8">
+        <div className="max-w-7xl mx-auto">
+          {children}
+        </div>
       </main>
     </div>
   );
