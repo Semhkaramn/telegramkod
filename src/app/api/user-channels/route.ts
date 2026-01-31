@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Kullanıcı-kanal ilişkisi oluştur
+    // Kullanıcı-kanal ilişkisi oluştur - varsayılan KAPALI
     const userChannel = await prisma.userChannel.upsert({
       where: {
         userId_channelId: {
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
       create: {
         userId: parseInt(userId),
         channelId: BigInt(channelId),
-        paused: false,
+        paused: true,  // Kod gönderilen kanallar kapalı olarak eklenir
       },
     });
 
