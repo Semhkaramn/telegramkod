@@ -63,6 +63,9 @@ export async function GET(request: NextRequest) {
       channel: {
         channelId: uc.channel.channelId.toString(),
         channelName: uc.channel.channelName,
+        channelUsername: (uc.channel as any).channelUsername || null,
+        channelPhoto: (uc.channel as any).channelPhoto || null,
+        memberCount: (uc.channel as any).memberCount || null,
         isJoined: uc.channel.isJoined,
         stats: uc.channel.stats.map((s) => ({
           id: s.id,
