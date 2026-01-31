@@ -15,7 +15,8 @@ export async function GET(request: NextRequest) {
 
     // Superadmin tüm kullanıcıların kanallarını görebilir
     // Normal kullanıcı sadece kendi kanallarını görebilir
-    let targetUserId = session.userId;
+    // Impersonation durumunda taklit edilen kullanıcının kanallarını göster
+    let targetUserId = session.impersonatingUserId || session.userId;
 
     if (userId && session.role === "superadmin") {
       targetUserId = parseInt(userId);
@@ -37,7 +38,26 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    return NextResponse.json(userChannels);
+    // BigInt'leri string'e dönüştür (JSON serileştirme için)
+    const serializedChannels = userChannels.map((uc) => ({
+      id: uc.id,
+      userId: uc.userId,
+      channelId: uc.channelId.toString(),
+      paused: uc.paused,
+      channel: {
+        channelId: uc.channel.channelId.toString(),
+        channelName: uc.channel.channelName,
+        isJoined: uc.channel.isJoined,
+        stats: uc.channel.stats.map((s) => ({
+          id: s.id,
+          channelId: s.channelId.toString(),
+          statDate: s.statDate.toISOString(),
+          dailyCount: s.dailyCount,
+        })),
+      },
+    }));
+
+    return NextResponse.json(serializedChannels);
   } catch (error) {
     console.error("Error fetching user channels:", error);
     return NextResponse.json(
@@ -95,7 +115,13 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json(userChannel);
+    // BigInt'i string'e dönüştür
+    return NextResponse.json({
+      id: userChannel.id,
+      userId: userChannel.userId,
+      channelId: userChannel.channelId.toString(),
+      paused: userChannel.paused,
+    });
   } catch (error) {
     console.error("Error assigning channel:", error);
     return NextResponse.json(
@@ -156,11 +182,12 @@ export async function PATCH(request: NextRequest) {
 
     // Superadmin herkesin kanalını güncelleyebilir
     // Normal kullanıcı sadece kendi kanalını güncelleyebilir
-    let targetUserId = session.userId;
+    // Impersonation durumunda taklit edilen kullanıcının kanalını güncelle
+    let targetUserId = session.impersonatingUserId || session.userId;
 
     if (userId && session.role === "superadmin") {
       targetUserId = parseInt(userId);
-    } else if (userId && parseInt(userId) !== session.userId) {
+    } else if (userId && parseInt(userId) !== targetUserId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -174,7 +201,13 @@ export async function PATCH(request: NextRequest) {
       data: { paused },
     });
 
-    return NextResponse.json(userChannel);
+    // BigInt'i string'e dönüştür
+    return NextResponse.json({
+      id: userChannel.id,
+      userId: userChannel.userId,
+      channelId: userChannel.channelId.toString(),
+      paused: userChannel.paused,
+    });
   } catch (error) {
     console.error("Error updating channel status:", error);
     return NextResponse.json(
