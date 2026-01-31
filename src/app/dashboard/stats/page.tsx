@@ -13,6 +13,7 @@ import {
   ArrowUp,
   ArrowDown,
   Minus,
+  Hash,
 } from "lucide-react";
 
 interface ChannelStats {
@@ -26,6 +27,7 @@ interface ChannelStats {
 interface Channel {
   channelId: string;
   channelName: string | null;
+  channelPhoto: string | null;
   stats: ChannelStats[];
 }
 
@@ -81,7 +83,6 @@ export default function StatsPage() {
 
   const calculateChannelStats = (channel: Channel, range: TimeRange) => {
     const { start } = getDateRange(range);
-    const today = new Date().toISOString().split("T")[0];
 
     let total = 0;
     let codes: string[] = [];
@@ -123,6 +124,7 @@ export default function StatsPage() {
     let todayTotal = 0;
     let weekTotal = 0;
     let monthTotal = 0;
+    let allTimeTotal = 0;
 
     const today = new Date().toISOString().split("T")[0];
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
@@ -135,6 +137,7 @@ export default function StatsPage() {
     userChannels.forEach((uc) => {
       uc.channel.stats.forEach((stat) => {
         const statDate = stat.statDate.split("T")[0];
+        allTimeTotal += stat.dailyCount;
         if (statDate === today) {
           todayTotal += stat.dailyCount;
         }
@@ -147,14 +150,14 @@ export default function StatsPage() {
       });
     });
 
-    return { todayTotal, weekTotal, monthTotal };
+    return { todayTotal, weekTotal, monthTotal, allTimeTotal };
   };
 
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="grid gap-4 md:grid-cols-3">
-          {[...Array(3)].map((_, i) => (
+        <div className="grid gap-4 md:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
             <Skeleton key={i} className="h-32 bg-zinc-800" />
           ))}
         </div>
@@ -163,7 +166,7 @@ export default function StatsPage() {
     );
   }
 
-  const { todayTotal, weekTotal, monthTotal } = calculateTotalStats();
+  const { todayTotal, weekTotal, monthTotal, allTimeTotal } = calculateTotalStats();
   const { label } = getDateRange(timeRange);
 
   return (
@@ -174,7 +177,7 @@ export default function StatsPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card className="border-zinc-800 bg-zinc-900">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-zinc-400">
@@ -210,6 +213,19 @@ export default function StatsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white">{monthTotal}</div>
+            <p className="text-xs text-zinc-500">kod gonderildi</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-zinc-800 bg-zinc-900">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-zinc-400">
+              Toplam
+            </CardTitle>
+            <Hash className="h-4 w-4 text-emerald-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white">{allTimeTotal}</div>
             <p className="text-xs text-zinc-500">kod gonderildi</p>
           </CardContent>
         </Card>
