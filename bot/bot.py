@@ -1,6 +1,7 @@
 import asyncio
 import re
 import psycopg2
+from psycopg2 import pool
 import os
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
@@ -32,10 +33,31 @@ istanbul_tz = pytz.timezone('Europe/Istanbul')
 # Telegram Bot API
 TELEGRAM_BOT_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-# —————— VERİTABANI ——————
-def get_db_connection():
+# —————— CONNECTION POOL ——————
+# Thread-safe connection pool - minimum 2, maximum 10 connection
+connection_pool = None
+
+def init_connection_pool():
+    """Connection pool'u başlat"""
+    global connection_pool
     try:
-        conn = psycopg2.connect(DATABASE_URL)
+        connection_pool = pool.ThreadedConnectionPool(
+            minconn=2,
+            maxconn=10,
+            dsn=DATABASE_URL
+        )
+        print("✅ Connection pool başlatıldı")
+    except Exception as e:
+        print(f"❌ Connection pool hatası: {e}")
+        raise
+
+def get_db_connection():
+    """Pool'dan connection al"""
+    global connection_pool
+    if connection_pool is None:
+        init_connection_pool()
+    try:
+        conn = connection_pool.getconn()
         with conn.cursor() as cursor:
             cursor.execute("SET timezone = 'Europe/Istanbul'")
         conn.commit()
@@ -44,66 +66,91 @@ def get_db_connection():
         print(f"❌ DB BAĞLANTI HATASI: {e}")
         raise
 
+def release_db_connection(conn):
+    """Connection'ı pool'a geri ver"""
+    global connection_pool
+    if connection_pool and conn:
+        try:
+            connection_pool.putconn(conn)
+        except Exception as e:
+            print(f"⚠️ Connection release hatası: {e}")
+
 # —————— DİNLEME KANALLARI ——————
 def get_listening_channels():
     """Dinleme kanallarını al - sadece channel_id"""
+    conn = None
     try:
-        with get_db_connection() as db:
-            cursor = db.cursor()
-            cursor.execute("SELECT channel_id FROM listening_channels")
-            result = [row[0] for row in cursor.fetchall()]
-            return result
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT channel_id FROM listening_channels")
+        result = [row[0] for row in cursor.fetchall()]
+        return result
     except Exception as e:
         print(f"❌ get_listening_channels HATASI: {e}")
         return []
+    finally:
+        if conn:
+            release_db_connection(conn)
 
 # —————— HEDEF KANALLAR ——————
 def get_active_channels():
     """Aktif hedef kanalları al"""
+    conn = None
     try:
-        with get_db_connection() as db:
-            cursor = db.cursor()
-            cursor.execute("""
-                SELECT DISTINCT c.channel_id
-                FROM channels c
-                INNER JOIN user_channels uc ON c.channel_id = uc.channel_id
-                INNER JOIN users u ON uc.user_id = u.id
-                WHERE uc.paused = false
-                  AND u.is_banned = false
-                  AND u.is_active = true
-                  AND u.bot_enabled = true
-            """)
-            result = [row[0] for row in cursor.fetchall()]
-            return result
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT DISTINCT c.channel_id
+            FROM channels c
+            INNER JOIN user_channels uc ON c.channel_id = uc.channel_id
+            INNER JOIN users u ON uc.user_id = u.id
+            WHERE uc.paused = false
+              AND u.is_banned = false
+              AND u.is_active = true
+              AND u.bot_enabled = true
+        """)
+        result = [row[0] for row in cursor.fetchall()]
+        return result
     except Exception as e:
         print(f"❌ get_active_channels HATASI: {e}")
         return []
+    finally:
+        if conn:
+            release_db_connection(conn)
 
 # —————— ANAHTAR KELİMELER ——————
 def get_all_keywords():
     """Anahtar kelimeleri al"""
+    conn = None
     try:
-        with get_db_connection() as db:
-            cursor = db.cursor()
-            cursor.execute("SELECT keyword FROM keywords ORDER BY keyword")
-            result = [row[0].lower() for row in cursor.fetchall()]
-            return result
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT keyword FROM keywords ORDER BY keyword")
+        result = [row[0].lower() for row in cursor.fetchall()]
+        return result
     except Exception as e:
         print(f"❌ get_all_keywords HATASI: {e}")
         return []
+    finally:
+        if conn:
+            release_db_connection(conn)
 
 # —————— YASAK KELİMELER ——————
 def get_all_banned_words():
     """Yasak kelimeleri al"""
+    conn = None
     try:
-        with get_db_connection() as db:
-            cursor = db.cursor()
-            cursor.execute("SELECT word FROM banned_words ORDER BY word")
-            result = [row[0].lower() for row in cursor.fetchall()]
-            return result
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT word FROM banned_words ORDER BY word")
+        result = [row[0].lower() for row in cursor.fetchall()]
+        return result
     except Exception as e:
         print(f"❌ get_all_banned_words HATASI: {e}")
         return []
+    finally:
+        if conn:
+            release_db_connection(conn)
 
 def has_banned_word(code: str) -> bool:
     """Kod yasak kelime içeriyor mu?"""
@@ -117,42 +164,50 @@ def has_banned_word(code: str) -> bool:
 # —————— LİNK ÖZELLEŞTİRME ——————
 def get_channel_user_id(channel_id: int):
     """Kanalın aktif kullanıcısını al"""
+    conn = None
     try:
-        with get_db_connection() as db:
-            cursor = db.cursor()
-            cursor.execute("""
-                SELECT uc.user_id FROM user_channels uc
-                INNER JOIN users u ON uc.user_id = u.id
-                WHERE uc.channel_id = %s
-                  AND uc.paused = false
-                  AND u.is_banned = false
-                  AND u.is_active = true
-                  AND u.bot_enabled = true
-                LIMIT 1
-            """, (channel_id,))
-            result = cursor.fetchone()
-            return result[0] if result else None
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT uc.user_id FROM user_channels uc
+            INNER JOIN users u ON uc.user_id = u.id
+            WHERE uc.channel_id = %s
+              AND uc.paused = false
+              AND u.is_banned = false
+              AND u.is_active = true
+              AND u.bot_enabled = true
+            LIMIT 1
+        """, (channel_id,))
+        result = cursor.fetchone()
+        return result[0] if result else None
     except Exception as e:
         print(f"❌ get_channel_user_id HATASI: {e}")
         return None
+    finally:
+        if conn:
+            release_db_connection(conn)
 
 def get_custom_link(user_id: int, channel_id: int, code: str, original_link: str) -> str:
     """Kullanıcının özel linkini al"""
+    conn = None
     try:
-        with get_db_connection() as db:
-            cursor = db.cursor()
-            cursor.execute("""
-                SELECT link_url FROM admin_links
-                WHERE user_id = %s AND channel_id = %s
-                AND (%s ILIKE '%%' || link_code || '%%' OR %s ILIKE '%%' || link_code || '%%')
-                ORDER BY LENGTH(link_code) DESC
-                LIMIT 1
-            """, (user_id, channel_id, code, original_link))
-            result = cursor.fetchone()
-            return result[0] if result else None
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT link_url FROM admin_links
+            WHERE user_id = %s AND channel_id = %s
+            AND (%s ILIKE '%%' || link_code || '%%' OR %s ILIKE '%%' || link_code || '%%')
+            ORDER BY LENGTH(link_code) DESC
+            LIMIT 1
+        """, (user_id, channel_id, code, original_link))
+        result = cursor.fetchone()
+        return result[0] if result else None
     except Exception as e:
         print(f"❌ get_custom_link HATASI: {e}")
         return None
+    finally:
+        if conn:
+            release_db_connection(conn)
 
 def get_link_for_channel(channel_id: int, code: str, original_link: str) -> str:
     """Kanal için uygun linki al - önce özel link, yoksa orijinal"""
@@ -163,111 +218,165 @@ def get_link_for_channel(channel_id: int, code: str, original_link: str) -> str:
             return custom_link
     return original_link
 
-# —————— KOD KONTROLÜ ——————
+# —————— KOD KONTROLÜ (RACE CONDITION DÜZELTİLDİ) ——————
 def is_code_recently_sent(code: str) -> bool:
     """Son 1 saat içinde kod gönderilmiş mi?"""
+    conn = None
     try:
-        with get_db_connection() as db:
-            cursor = db.cursor()
-            cursor.execute("""
-                SELECT 1 FROM sent_codes
-                WHERE code = %s AND sent_at > (NOW() AT TIME ZONE 'Europe/Istanbul') - INTERVAL '1 hour'
-            """, (code,))
-            result = cursor.fetchone() is not None
-            return result
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT 1 FROM sent_codes
+            WHERE code = %s AND sent_at > (NOW() AT TIME ZONE 'Europe/Istanbul') - INTERVAL '1 hour'
+        """, (code,))
+        result = cursor.fetchone() is not None
+        return result
     except Exception as e:
         print(f"❌ is_code_recently_sent HATASI: {e}")
         return False
+    finally:
+        if conn:
+            release_db_connection(conn)
 
 def mark_code_as_sent(code: str) -> bool:
-    """Kodu gönderildi olarak işaretle"""
+    """Kodu gönderildi olarak işaretle - Race condition için SERIALIZABLE isolation kullan"""
+    conn = None
     try:
-        with get_db_connection() as db:
-            cursor = db.cursor()
-            cursor.execute("""
-                SELECT 1 FROM sent_codes
-                WHERE code = %s AND sent_at > (NOW() AT TIME ZONE 'Europe/Istanbul') - INTERVAL '1 hour'
-                FOR UPDATE
-            """, (code,))
+        conn = get_db_connection()
+        # Transaction isolation level'ı SERIALIZABLE yap - race condition önleme
+        conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_SERIALIZABLE)
+        cursor = conn.cursor()
 
-            if cursor.fetchone():
-                return False
-
+        try:
+            # Tek sorguda kontrol ve insert - atomik işlem
             cursor.execute("""
                 INSERT INTO sent_codes (code, sent_at)
-                VALUES (%s, NOW() AT TIME ZONE 'Europe/Istanbul')
-                ON CONFLICT (code) DO UPDATE SET sent_at = NOW() AT TIME ZONE 'Europe/Istanbul'
-            """, (code,))
-            db.commit()
-            return True
+                SELECT %s, NOW() AT TIME ZONE 'Europe/Istanbul'
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM sent_codes
+                    WHERE code = %s
+                    AND sent_at > (NOW() AT TIME ZONE 'Europe/Istanbul') - INTERVAL '1 hour'
+                )
+                ON CONFLICT (code) DO UPDATE
+                SET sent_at = CASE
+                    WHEN sent_codes.sent_at <= (NOW() AT TIME ZONE 'Europe/Istanbul') - INTERVAL '1 hour'
+                    THEN NOW() AT TIME ZONE 'Europe/Istanbul'
+                    ELSE sent_codes.sent_at
+                END
+                RETURNING code
+            """, (code, code))
+
+            result = cursor.fetchone()
+            conn.commit()
+
+            # Eğer sonuç varsa, yeni kayıt eklendi veya güncellendi
+            return result is not None
+
+        except psycopg2.Error as e:
+            conn.rollback()
+            # Serialization failure durumunda - başka bir process aynı kodu ekledi
+            if e.pgcode == '40001':  # serialization_failure
+                print(f"🔄 Concurrent insert algılandı: {code}")
+                return False
+            raise
+
     except Exception as e:
         print(f"❌ mark_code_as_sent HATASI: {e}")
+        if conn:
+            try:
+                conn.rollback()
+            except:
+                pass
         return False
+    finally:
+        if conn:
+            # Isolation level'ı varsayılana döndür
+            try:
+                conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_READ_COMMITTED)
+            except:
+                pass
+            release_db_connection(conn)
 
 def cleanup_old_codes():
     """Eski kodları temizle"""
+    conn = None
     try:
-        with get_db_connection() as db:
-            cursor = db.cursor()
-            cursor.execute("""
-                DELETE FROM sent_codes
-                WHERE sent_at < (NOW() AT TIME ZONE 'Europe/Istanbul') - INTERVAL '1 hour'
-            """)
-            db.commit()
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            DELETE FROM sent_codes
+            WHERE sent_at < (NOW() AT TIME ZONE 'Europe/Istanbul') - INTERVAL '1 hour'
+        """)
+        conn.commit()
     except Exception as e:
         print(f"❌ cleanup_old_codes HATASI: {e}")
+    finally:
+        if conn:
+            release_db_connection(conn)
 
 # —————— İSTATİSTİK ——————
 def record_code_stat(channel_id: int, code: str):
     """Kod istatistiğini kaydet"""
+    conn = None
     try:
-        with get_db_connection() as db:
-            cursor = db.cursor()
-            now = datetime.now(istanbul_tz)
-            today = now.date()
-            cursor.execute("""
-                INSERT INTO channel_stats (channel_id, stat_date, daily_count, last_updated)
-                VALUES (%s, %s, 1, %s)
-                ON CONFLICT (channel_id, stat_date) DO UPDATE
-                SET daily_count = channel_stats.daily_count + 1,
-                    last_updated = %s
-            """, (channel_id, today, now, now))
-            db.commit()
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        now = datetime.now(istanbul_tz)
+        today = now.date()
+        cursor.execute("""
+            INSERT INTO channel_stats (channel_id, stat_date, daily_count, last_updated)
+            VALUES (%s, %s, 1, %s)
+            ON CONFLICT (channel_id, stat_date) DO UPDATE
+            SET daily_count = channel_stats.daily_count + 1,
+                last_updated = %s
+        """, (channel_id, today, now, now))
+        conn.commit()
     except Exception as e:
         print(f"❌ record_code_stat HATASI: {e}")
+    finally:
+        if conn:
+            release_db_connection(conn)
 
 # —————— BOT LOG ——————
 def log_bot_message(level: str, message: str, details: str = None):
     """Log kaydet"""
+    conn = None
     try:
-        with get_db_connection() as db:
-            cursor = db.cursor()
-            cursor.execute("""
-                INSERT INTO bot_logs (level, message, details, created_at)
-                VALUES (%s, %s, %s, NOW() AT TIME ZONE 'Europe/Istanbul')
-            """, (level, message, details))
-            db.commit()
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO bot_logs (level, message, details, created_at)
+            VALUES (%s, %s, %s, NOW() AT TIME ZONE 'Europe/Istanbul')
+        """, (level, message, details))
+        conn.commit()
     except Exception as e:
         print(f"⚠️ Log hatası: {e}")
+    finally:
+        if conn:
+            release_db_connection(conn)
 
 def update_bot_status(is_running: bool, error: str = None):
     """Bot durumunu güncelle"""
+    conn = None
     try:
-        with get_db_connection() as db:
-            cursor = db.cursor()
-            cursor.execute("""
-                INSERT INTO bot_status (id, is_running, last_ping, last_error, started_at, updated_at)
-                VALUES (1, %s, NOW(), %s, CASE WHEN %s THEN NOW() ELSE NULL END, NOW())
-                ON CONFLICT (id) DO UPDATE SET
-                    is_running = %s,
-                    last_ping = NOW(),
-                    last_error = %s,
-                    started_at = CASE WHEN %s AND bot_status.started_at IS NULL THEN NOW() ELSE bot_status.started_at END,
-                    updated_at = NOW()
-            """, (is_running, error, is_running, is_running, error, is_running))
-            db.commit()
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO bot_status (id, is_running, last_ping, last_error, started_at, updated_at)
+            VALUES (1, %s, NOW(), %s, CASE WHEN %s THEN NOW() ELSE NULL END, NOW())
+            ON CONFLICT (id) DO UPDATE SET
+                is_running = %s,
+                last_ping = NOW(),
+                last_error = %s,
+                started_at = CASE WHEN %s AND bot_status.started_at IS NULL THEN NOW() ELSE bot_status.started_at END,
+                updated_at = NOW()
+        """, (is_running, error, is_running, is_running, error, is_running))
+        conn.commit()
     except Exception as e:
         print(f"⚠️ Status hatası: {e}")
+    finally:
+        if conn:
+            release_db_connection(conn)
 
 # —————— TELETHON CLIENT ——————
 if SESSION_STRING:
@@ -395,8 +504,15 @@ async def process_message(event):
         # Anahtar kelimeler
         keywords = get_all_keywords()
 
-        # Link regex - daha esnek (http://, https://, www. veya doğrudan domain)
-        link_pattern = r'^(https?://|www\.)[^\s]+$|^[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}[^\s]*$'
+        # Link regex - daha kapsamlı URL pattern
+        # Desteklenen formatlar:
+        # - https://example.com/path
+        # - http://example.com
+        # - www.example.com/path
+        # - example.com (TLD ile)
+        # - subdomain.example.com
+        # - URL'ler query string ve fragment içerebilir
+        link_pattern = r'^(?:https?://)?(?:www\.)?[a-zA-Z0-9][-a-zA-Z0-9]*(?:\.[a-zA-Z0-9][-a-zA-Z0-9]*)+(?:/[^\s]*)?$'
 
         # FORMAT 1: kelime\nkod\nlink (3 satır)
         if len(lines) >= 3:
@@ -408,7 +524,7 @@ async def process_message(event):
 
                 # Kod kontrolü (alfanümerik + Türkçe + tire)
                 code_match = re.match(r'^[\wÇçĞğİıÖöŞşÜü-]+$', code)
-                link_match = re.match(link_pattern, link)
+                link_match = re.match(link_pattern, link, re.IGNORECASE)
 
                 if code_match and link_match:
                     if has_banned_word(code):
@@ -429,7 +545,7 @@ async def process_message(event):
 
         # Kod kontrolü
         code_match = re.match(r'^[\wÇçĞğİıÖöŞşÜü-]+$', code)
-        link_match = re.match(link_pattern, link)
+        link_match = re.match(link_pattern, link, re.IGNORECASE)
 
         if code_match and link_match:
             if has_banned_word(code):
@@ -510,6 +626,9 @@ async def main():
     print("=" * 60)
 
     try:
+        # Connection pool'u başlat
+        init_connection_pool()
+
         await client.start()
         update_bot_status(True)
         log_bot_message("info", "Bot başlatıldı")
@@ -562,6 +681,10 @@ async def main():
         update_bot_status(False)
         await http_client.aclose()
         await client.disconnect()
+        # Connection pool'u kapat
+        if connection_pool:
+            connection_pool.closeall()
+            print("✅ Connection pool kapatıldı")
 
 if __name__ == "__main__":
     asyncio.run(main())
