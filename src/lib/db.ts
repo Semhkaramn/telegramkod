@@ -368,3 +368,60 @@ export async function removeAdminLink(id: number) {
     where: { id },
   });
 }
+
+// ============ ADMIN FUNCTIONS ============
+
+export async function getAllAdmins() {
+  const admins = await prisma.user.findMany({
+    where: { role: "superadmin" },
+    select: {
+      id: true,
+      username: true,
+      displayName: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return admins.map((admin) => ({
+    admin_id: admin.id,
+    admin_username: admin.username,
+    display_name: admin.displayName,
+    created_at: admin.createdAt,
+  }));
+}
+
+export async function addAdmin(
+  channelId: number,
+  adminId: number,
+  adminUsername: string | null,
+  adminType: string = "ana"
+) {
+  // Bu fonksiyon aslında kullanıcıya kanal atama işlemi yapıyor
+  // Mevcut sistemde UserChannel tablosu kullanılıyor
+  return prisma.userChannel.upsert({
+    where: {
+      userId_channelId: {
+        userId: adminId,
+        channelId: BigInt(channelId),
+      },
+    },
+    update: {},
+    create: {
+      userId: adminId,
+      channelId: BigInt(channelId),
+      paused: true,
+    },
+  });
+}
+
+export async function removeAdmin(channelId: number, adminId: number) {
+  return prisma.userChannel.delete({
+    where: {
+      userId_channelId: {
+        userId: adminId,
+        channelId: BigInt(channelId),
+      },
+    },
+  });
+}
