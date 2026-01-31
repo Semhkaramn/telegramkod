@@ -474,8 +474,228 @@ async def process_message(event):
         keywords = get_all_keywords()
         print(f"🔍 DEBUG: Keywords: {keywords}")
 
-        # Link regex - daha esnek
-        link_pattern = r'^https?://[^\s]+$'
+        # Link regex - daha esnek (http://, https://, www. veya doğrudan domain)
+        link_pattern = r'^(https?://|www\.)[^\s]+$|^[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}[^\s]*
+
+        # FORMAT 1: kelime\nkod\nlink (3 satır)
+        if len(lines) >= 3:
+            first_line = lines[0].lower()
+            print(f"🔍 DEBUG FORMAT1 kontrol: first_line='{first_line}', in keywords={first_line in keywords}")
+
+            if first_line in keywords:
+                code = lines[1].strip()
+                link = lines[2].strip()
+
+                print(f"🔍 DEBUG FORMAT1: code='{code}', link='{link}'")
+
+                # Kod kontrolü (alfanümerik + Türkçe + tire)
+                code_match = re.match(r'^[\wÇçĞğİıÖöŞşÜü-]+$', code)
+                link_match = re.match(link_pattern, link)
+                print(f"🔍 DEBUG: code_match={bool(code_match)}, link_match={bool(link_match)}")
+
+                if code_match and link_match:
+                    if has_banned_word(code):
+                        print(f"🚫 Yasak kelime: {code}")
+                        return
+
+                    print(f"📡 FORMAT 1 | Kelime: {first_line} | Kod: {code}")
+
+                    if mark_code_as_sent(code):
+                        await send_to_all_channels(code, link)
+                    else:
+                        print(f"🔄 Tekrar: {code}")
+                    return
+                else:
+                    print(f"🔍 DEBUG: FORMAT1 regex eşleşmedi")
+
+        # FORMAT 2: kod\nlink (2 satır)
+        code = lines[0].strip()
+        link = lines[1].strip()
+
+        print(f"🔍 DEBUG FORMAT2: code='{code}', link='{link}'")
+
+        # Kod kontrolü
+        code_match = re.match(r'^[\wÇçĞğİıÖöŞşÜü-]+$', code)
+        link_match = re.match(link_pattern, link)
+        print(f"🔍 DEBUG: code_match={bool(code_match)}, link_match={bool(link_match)}")
+
+        if code_match and link_match:
+            if has_banned_word(code):
+                print(f"🚫 Yasak kelime: {code}")
+                return
+
+            print(f"📡 FORMAT 2 | Kod: {code}")
+
+            if mark_code_as_sent(code):
+                await send_to_all_channels(code, link)
+            else:
+                print(f"🔄 Tekrar: {code}")
+        else:
+            print(f"🔍 DEBUG: FORMAT2 regex eşleşmedi, mesaj işlenmedi")
+
+    except Exception as e:
+        print(f"❌ Mesaj işleme hatası: {e}")
+        print(traceback.format_exc())
+        log_bot_message("error", "Mesaj işleme hatası", str(e)[:500])
+
+# —————— ANA DİNLEYİCİ ——————
+@client.on(events.NewMessage())
+async def message_handler(event):
+    """Dinleme kanallarından gelen mesajları işle"""
+    try:
+        if not event.chat:
+            print("🔍 DEBUG: event.chat yok, atlanıyor")
+            return
+
+        current_channel_id = event.chat.id
+        normalized_id = normalize_channel_id(current_channel_id)
+
+        # DEBUG: Her mesajı logla
+        chat_title = getattr(event.chat, 'title', 'Bilinmeyen')
+        chat_username = getattr(event.chat, 'username', 'N/A')
+        is_channel = getattr(event.chat, 'broadcast', False)
+
+        print(f"")
+        print(f"{'='*60}")
+        print(f"🔔 YENİ MESAJ GELDİ!")
+        print(f"{'='*60}")
+        print(f"📍 Kanal: {chat_title} (@{chat_username})")
+        print(f"📍 ID: {current_channel_id}")
+        print(f"📍 Normalized ID: {normalized_id}")
+        print(f"📍 Is Channel: {is_channel}")
+        print(f"{'='*60}")
+
+        # Dinleme kanallarını kontrol et
+        listening_channels = get_listening_channels()
+        print(f"📋 Dinleme listesi: {listening_channels}")
+
+        matched = False
+        for lc_id in listening_channels:
+            print(f"🔍 Karşılaştırma: normalized_id({normalized_id}) == lc_id({lc_id})? {normalized_id == lc_id}")
+            print(f"🔍 Karşılaştırma: current_channel_id({current_channel_id}) == lc_id({lc_id})? {current_channel_id == lc_id}")
+
+            if normalized_id == lc_id or current_channel_id == lc_id:
+                print(f"✅ EŞLEŞME BULUNDU! Kanal: {lc_id}")
+                matched = True
+                await process_message(event)
+                break
+
+        if not matched:
+            print(f"⚠️ EŞLEŞME YOK!")
+            print(f"   Mesaj kanal ID: {current_channel_id} (normalized: {normalized_id})")
+            print(f"   Dinleme kanalları: {listening_channels}")
+            print(f"   Tip karşılaştırması: mesaj_id type={type(current_channel_id)}, db type={type(listening_channels[0]) if listening_channels else 'N/A'}")
+
+    except Exception as e:
+        print(f"❌ Handler hatası: {e}")
+        print(traceback.format_exc())
+
+# —————— KEEP ALIVE ——————
+async def keep_alive():
+    """Bot'u canlı tut"""
+    while True:
+        try:
+            print(f"🔍 DEBUG keep_alive: get_me çağrılıyor")
+            await client.get_me()
+            print(f"🔍 DEBUG keep_alive: cleanup_old_codes çağrılıyor")
+            cleanup_old_codes()
+            print(f"🔍 DEBUG keep_alive: update_bot_status(True) çağrılıyor")
+            update_bot_status(True)
+        except Exception as e:
+            print(f"⚠️ Keep alive hatası: {e}")
+            print(traceback.format_exc())
+            update_bot_status(True, str(e)[:200])
+        await asyncio.sleep(300)
+
+# —————— BAŞLANGIÇ ——————
+async def main():
+    """Bot'u başlat"""
+    print("=" * 60)
+    print("🤖 Telegram Kod Botu Başlatılıyor...")
+    print("=" * 60)
+    print(f"🔍 DEBUG: API_ID = {api_id}")
+    print(f"🔍 DEBUG: API_HASH = {api_hash[:10]}..." if api_hash else "❌ API_HASH boş!")
+    print(f"🔍 DEBUG: SESSION_STRING = {'Var' if SESSION_STRING else 'Yok'}")
+    print(f"🔍 DEBUG: BOT_TOKEN = {'Var' if BOT_TOKEN else 'Yok'}")
+    print(f"🔍 DEBUG: DATABASE_URL = {'Var' if DATABASE_URL else 'Yok'}")
+    print("=" * 60)
+
+    try:
+        print("🔄 Telethon client başlatılıyor...")
+        await client.start()
+        update_bot_status(True)
+        log_bot_message("info", "Bot başlatıldı")
+
+        me = await client.get_me()
+        print(f"✅ Telethon: {me.first_name} (@{me.username}) [ID: {me.id}]")
+
+        # Bot token kontrol
+        if BOT_TOKEN:
+            try:
+                response = await http_client.get(f"{TELEGRAM_BOT_API}/getMe")
+                bot_data = response.json()
+                if bot_data.get("ok"):
+                    print(f"✅ Bot API: @{bot_data['result'].get('username')} [ID: {bot_data['result'].get('id')}]")
+                else:
+                    print(f"❌ Bot API hatası: {bot_data}")
+            except Exception as e:
+                print(f"❌ Bot API hatası: {e}")
+
+        # Dinleme kanallarını göster
+        listening_channels = get_listening_channels()
+        print(f"📡 Dinleme kanalları: {len(listening_channels)}")
+        for ch in listening_channels:
+            print(f"   • {ch} (type: {type(ch)})")
+
+        # Aktif hedef kanalları göster
+        active_channels = get_active_channels()
+        print(f"📢 Hedef kanallar: {len(active_channels)}")
+        for ch in active_channels:
+            print(f"   • {ch} (type: {type(ch)})")
+
+        # Anahtar kelimeleri göster
+        keywords = get_all_keywords()
+        print(f"🔑 Anahtar kelimeler: {keywords}")
+
+        # Telethon'un hangi kanallara erişebildiğini kontrol et
+        print("")
+        print("=" * 60)
+        print("🔍 TELETHON KANAL ERİŞİM KONTROLÜ")
+        print("=" * 60)
+        try:
+            dialogs = await client.get_dialogs(limit=50)
+            print(f"📋 Erişilebilir kanal/grup sayısı: {len(dialogs)}")
+            for dialog in dialogs:
+                if dialog.is_channel:
+                    print(f"   📢 {dialog.title} | ID: {dialog.id} | @{dialog.entity.username or 'N/A'}")
+        except Exception as e:
+            print(f"❌ Dialog listesi alınamadı: {e}")
+        print("=" * 60)
+
+        # Keep alive başlat
+        asyncio.create_task(keep_alive())
+
+        print("")
+        print("=" * 60)
+        print("🚀 Bot çalışıyor! Mesajlar bekleniyor...")
+        print("=" * 60)
+        print("")
+
+        await client.run_until_disconnected()
+
+    except Exception as e:
+        print(f"❌ Bot hatası: {e}")
+        print(traceback.format_exc())
+        update_bot_status(False, str(e)[:200])
+        log_bot_message("error", "Bot hatası", str(e)[:500])
+    finally:
+        update_bot_status(False)
+        await http_client.aclose()
+        await client.disconnect()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+
 
         # FORMAT 1: kelime\nkod\nlink (3 satır)
         if len(lines) >= 3:
