@@ -18,7 +18,9 @@ interface ChannelStats {
 interface Channel {
   channelId: string;
   channelName: string | null;
+  channelUsername: string | null;
   channelPhoto: string | null;
+  memberCount: number | null;
   stats: ChannelStats[];
 }
 
@@ -214,7 +216,10 @@ export default function ChannelsPage() {
                         <h3 className="text-lg font-medium text-white">
                           {uc.channel.channelName || `Kanal ${uc.channelId}`}
                         </h3>
-                        <p className="text-sm text-zinc-500">ID: {uc.channelId}</p>
+                        <p className="text-sm text-zinc-500">
+                          {uc.channel.channelUsername ? `@${uc.channel.channelUsername}` : `ID: ${uc.channelId}`}
+                          {uc.channel.memberCount && ` · ${uc.channel.memberCount.toLocaleString()} uye`}
+                        </p>
                       </div>
                     </div>
 
