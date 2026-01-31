@@ -244,10 +244,6 @@ export async function getAllListeningChannels() {
   return channels.map((c) => ({
     channel_id: c.channelId.toString(),
     channel_name: c.channelName,
-    default_link: c.defaultLink,
-    keyword: c.keyword,
-    type: c.type,
-    triggers: c.triggers,
   }));
 }
 
@@ -256,28 +252,16 @@ export const getListeningChannels = getAllListeningChannels;
 
 export async function addListeningChannel(
   channelId: number,
-  channelName?: string,
-  defaultLink?: string,
-  keyword?: string,
-  type?: string,
-  triggers?: string
+  channelName?: string
 ) {
   return prisma.listeningChannel.upsert({
     where: { channelId: BigInt(channelId) },
     update: {
-      channelName,
-      defaultLink: defaultLink || "https://example.com",
-      keyword: keyword || "",
-      type: type || "text",
-      triggers: triggers || "",
+      channelName: channelName || null,
     },
     create: {
       channelId: BigInt(channelId),
       channelName: channelName || null,
-      defaultLink: defaultLink || "https://example.com",
-      keyword: keyword || "",
-      type: type || "text",
-      triggers: triggers || "",
     },
   });
 }
@@ -286,10 +270,6 @@ export async function updateListeningChannel(
   channelId: number,
   data: {
     channelName?: string;
-    defaultLink?: string;
-    keyword?: string;
-    type?: string;
-    triggers?: string;
   }
 ) {
   return prisma.listeningChannel.update({
