@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@/lib/utils";
 
 interface DialogContextType {
@@ -34,18 +35,37 @@ const useDialog = () => {
   return context;
 };
 
+interface DialogTriggerProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  asChild?: boolean;
+}
+
 const DialogTrigger = React.forwardRef<
   HTMLButtonElement,
-  React.ButtonHTMLAttributes<HTMLButtonElement>
->(({ children, onClick, ...props }, ref) => {
+  DialogTriggerProps
+>(({ children, onClick, asChild, ...props }, ref) => {
   const { setOpen } = useDialog();
+
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    setOpen(true);
+    onClick?.(e);
+  };
+
+  if (asChild) {
+    return (
+      <Slot
+        ref={ref}
+        onClick={handleClick as unknown as React.MouseEventHandler<HTMLElement>}
+        {...(props as React.HTMLAttributes<HTMLElement>)}
+      >
+        {children}
+      </Slot>
+    );
+  }
+
   return (
     <button
       ref={ref}
-      onClick={(e) => {
-        setOpen(true);
-        onClick?.(e);
-      }}
+      onClick={handleClick}
       {...props}
     >
       {children}
