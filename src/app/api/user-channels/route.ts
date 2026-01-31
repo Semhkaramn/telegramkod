@@ -2,6 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 
+// Channel tipi - Prisma şemasına uygun
+interface ChannelWithStats {
+  channelId: bigint;
+  channelName: string | null;
+  channelUsername: string | null;
+  channelPhoto: string | null;
+  memberCount: number | null;
+  isJoined: boolean;
+  stats: {
+    id: number;
+    channelId: bigint;
+    statDate: Date;
+    dailyCount: number;
+  }[];
+}
+
+interface UserChannelWithChannel {
+  id: number;
+  userId: number;
+  channelId: bigint;
+  paused: boolean;
+  channel: ChannelWithStats;
+}
+
 // GET - Kullanıcının kanallarını getir
 export async function GET(request: NextRequest) {
   try {
@@ -52,7 +76,7 @@ export async function GET(request: NextRequest) {
           },
         },
       },
-    });
+    }) as UserChannelWithChannel[];
 
     // BigInt'leri string'e dönüştür (JSON serileştirme için)
     const serializedChannels = userChannels.map((uc) => ({
@@ -63,9 +87,9 @@ export async function GET(request: NextRequest) {
       channel: {
         channelId: uc.channel.channelId.toString(),
         channelName: uc.channel.channelName,
-        channelUsername: (uc.channel as any).channelUsername || null,
-        channelPhoto: (uc.channel as any).channelPhoto || null,
-        memberCount: (uc.channel as any).memberCount || null,
+        channelUsername: uc.channel.channelUsername ?? null,
+        channelPhoto: uc.channel.channelPhoto ?? null,
+        memberCount: uc.channel.memberCount ?? null,
         isJoined: uc.channel.isJoined,
         stats: uc.channel.stats.map((s) => ({
           id: s.id,
