@@ -21,7 +21,6 @@ interface ChannelStats {
   channelId: string;
   statDate: string;
   dailyCount: number;
-  codeList: string;
 }
 
 interface Channel {
@@ -85,15 +84,11 @@ export default function StatsPage() {
     const { start } = getDateRange(range);
 
     let total = 0;
-    let codes: string[] = [];
 
     channel.stats.forEach((stat) => {
       const statDate = new Date(stat.statDate);
       if (statDate >= start) {
         total += stat.dailyCount;
-        if (stat.codeList) {
-          codes.push(...stat.codeList.split(",").filter((c) => c.trim()));
-        }
       }
     });
 
@@ -117,7 +112,7 @@ export default function StatsPage() {
           : 0
         : ((total - previousTotal) / previousTotal) * 100;
 
-    return { total, codes: codes.slice(0, 10), trend };
+    return { total, trend };
   };
 
   const calculateTotalStats = () => {
@@ -314,32 +309,7 @@ export default function StatsPage() {
                       </div>
                     </div>
 
-                    {stats.codes.length > 0 && (
-                      <div>
-                        <p className="mb-2 text-xs text-zinc-500">
-                          Son gonderilen kodlar:
-                        </p>
-                        <div className="flex flex-wrap gap-1">
-                          {stats.codes.slice(0, 5).map((code, idx) => (
-                            <Badge
-                              key={idx}
-                              variant="secondary"
-                              className="bg-zinc-800 text-xs text-zinc-400"
-                            >
-                              {code}
-                            </Badge>
-                          ))}
-                          {stats.codes.length > 5 && (
-                            <Badge
-                              variant="secondary"
-                              className="bg-zinc-800 text-xs text-zinc-500"
-                            >
-                              +{stats.codes.length - 5} daha
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    )}
+
                   </div>
                 </CardContent>
               </Card>
