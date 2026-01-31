@@ -29,30 +29,33 @@ function LoginForm() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Giriş başarısız");
+        setError(data.error || "Giris basarisiz");
         setLoading(false);
         return;
       }
 
-      // Redirect based on role
-      const from = searchParams.get("from");
-      if (from) {
-        router.push(from);
-      } else if (data.user.role === "superadmin") {
+      // Admin ise admin paneline yonlendir
+      if (data.user.role === "superadmin") {
         router.push("/admin");
       } else {
-        router.push("/dashboard");
+        // Normal kullanici icin dashboard'a yonlendir
+        const from = searchParams.get("from");
+        if (from && !from.startsWith("/admin")) {
+          router.push(from);
+        } else {
+          router.push("/dashboard");
+        }
       }
     } catch (err) {
-      setError("Bağlantı hatası");
+      setError("Baglanti hatasi");
       setLoading(false);
     }
   };
 
   return (
-    <Card className="w-full max-w-md border-zinc-700 bg-zinc-900/50 backdrop-blur-sm">
+    <Card className="w-full max-w-md">
       <CardHeader className="text-center pb-2">
-        <div className="mx-auto w-16 h-16 bg-zinc-800 rounded-2xl flex items-center justify-center mb-4 border border-zinc-700">
+        <div className="mx-auto w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-blue-500/30">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="32"
@@ -63,44 +66,42 @@ function LoginForm() {
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="text-zinc-100"
+            className="text-white"
           >
             <path d="m22 2-7 20-4-9-9-4Z" />
             <path d="M22 2 11 13" />
           </svg>
         </div>
-        <CardTitle className="text-2xl font-bold text-zinc-100">Telegram Bot Admin</CardTitle>
-        <CardDescription className="text-zinc-400">
-          Yonetim paneline giriş yapın
+        <CardTitle className="text-2xl font-bold">Telegram Bot Panel</CardTitle>
+        <CardDescription>
+          Uye panelinize giris yapin
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center">
+            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center">
               {error}
             </div>
           )}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-300">Kullanıcı Adı</label>
+            <label className="text-sm font-medium text-slate-300">Kullanici Adi</label>
             <Input
               type="text"
-              placeholder="admin"
+              placeholder="kullanici_adi"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-500 focus:ring-zinc-500"
               required
               autoComplete="username"
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-300">Şifre</label>
+            <label className="text-sm font-medium text-slate-300">Sifre</label>
             <Input
               type="password"
               placeholder="********"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-500 focus:ring-zinc-500"
               required
               autoComplete="current-password"
             />
@@ -108,7 +109,8 @@ function LoginForm() {
           <Button
             type="submit"
             disabled={loading}
-            className="w-full bg-zinc-100 text-zinc-900 hover:bg-zinc-200 font-medium"
+            variant="primary"
+            className="w-full"
           >
             {loading ? (
               <span className="flex items-center gap-2">
@@ -132,10 +134,10 @@ function LoginForm() {
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                   />
                 </svg>
-                Giriş yapılıyor...
+                Giris yapiliyor...
               </span>
             ) : (
-              "Giriş Yap"
+              "Giris Yap"
             )}
           </Button>
         </form>
@@ -146,17 +148,17 @@ function LoginForm() {
 
 function LoginFormFallback() {
   return (
-    <Card className="w-full max-w-md border-zinc-700 bg-zinc-900/50 backdrop-blur-sm">
+    <Card className="w-full max-w-md">
       <CardHeader className="text-center pb-2">
-        <div className="mx-auto w-16 h-16 bg-zinc-800 rounded-2xl flex items-center justify-center mb-4 border border-zinc-700 animate-pulse" />
-        <div className="h-8 bg-zinc-800 rounded animate-pulse mb-2" />
-        <div className="h-4 bg-zinc-800 rounded animate-pulse w-3/4 mx-auto" />
+        <div className="mx-auto w-16 h-16 bg-slate-800 rounded-2xl flex items-center justify-center mb-4 animate-pulse" />
+        <div className="h-8 bg-slate-800 rounded animate-pulse mb-2" />
+        <div className="h-4 bg-slate-800 rounded animate-pulse w-3/4 mx-auto" />
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          <div className="h-10 bg-zinc-800 rounded animate-pulse" />
-          <div className="h-10 bg-zinc-800 rounded animate-pulse" />
-          <div className="h-10 bg-zinc-800 rounded animate-pulse" />
+          <div className="h-10 bg-slate-800 rounded animate-pulse" />
+          <div className="h-10 bg-slate-800 rounded animate-pulse" />
+          <div className="h-10 bg-slate-800 rounded animate-pulse" />
         </div>
       </CardContent>
     </Card>
@@ -165,7 +167,7 @@ function LoginFormFallback() {
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-4">
       <Suspense fallback={<LoginFormFallback />}>
         <LoginForm />
       </Suspense>
