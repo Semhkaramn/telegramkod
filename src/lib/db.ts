@@ -225,6 +225,9 @@ export async function getAllListeningChannels() {
   }));
 }
 
+// Alias for API compatibility
+export const getListeningChannels = getAllListeningChannels;
+
 export async function addListeningChannel(
   channelId: number,
   channelName?: string,
