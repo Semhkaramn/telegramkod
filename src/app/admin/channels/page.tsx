@@ -19,6 +19,11 @@ import {
 interface Channel {
   channel_id: string;
   channel_name: string | null;
+  channel_username: string | null;
+  channel_photo: string | null;
+  member_count: number | null;
+  description: string | null;
+  last_updated: string | null;
   created_at: string;
   paused: boolean;
   users: {
@@ -65,13 +70,14 @@ export default function ChannelsPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetchData();
+    // İlk yüklenişte kanalları Telegram'dan güncelle
+    fetchData(true);
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = async (refresh = false) => {
     try {
       const [channelsRes, usersRes] = await Promise.all([
-        fetch("/api/channels"),
+        fetch(`/api/channels${refresh ? "?refresh=true" : ""}`),
         fetch("/api/users"),
       ]);
 
@@ -387,18 +393,27 @@ export default function ChannelsPage() {
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-400">
-                        <path d="m22 2-7 20-4-9-9-4Z" />
-                        <path d="M22 2 11 13" />
-                      </svg>
-                    </div>
+                    {channel.channel_photo ? (
+                      <img
+                        src={channel.channel_photo}
+                        alt={channel.channel_name || "Kanal"}
+                        className="w-10 h-10 rounded-lg object-cover"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-400">
+                          <path d="m22 2-7 20-4-9-9-4Z" />
+                          <path d="M22 2 11 13" />
+                        </svg>
+                      </div>
+                    )}
                     <div>
                       <CardTitle className="text-zinc-100 text-lg">
                         {channel.channel_name || `Kanal ${channel.channel_id}`}
                       </CardTitle>
                       <CardDescription className="text-zinc-500">
-                        ID: {channel.channel_id}
+                        {channel.channel_username ? `@${channel.channel_username}` : `ID: ${channel.channel_id}`}
+                        {channel.member_count && ` · ${channel.member_count.toLocaleString()} uye`}
                       </CardDescription>
                     </div>
                   </div>
