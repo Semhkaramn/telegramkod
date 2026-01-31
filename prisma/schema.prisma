@@ -92,7 +92,6 @@ model ChannelStats {
   channelId   BigInt   @map("channel_id")
   statDate    DateTime @map("stat_date") @db.Date
   dailyCount  Int      @default(0) @map("daily_count")
-  codeList    String   @default("") @map("code_list")
   lastUpdated DateTime @default(now()) @map("last_updated")
 
   channel Channel @relation(fields: [channelId], references: [channelId], onDelete: Cascade)
@@ -109,13 +108,7 @@ model SentCode {
   @@map("sent_codes")
 }
 
-// Katılınan kanallar
-model JoinedChannel {
-  channelId BigInt   @id @map("channel_id")
-  joinedAt  DateTime @default(now()) @map("joined_at")
-
-  @@map("joined_channels")
-}
+// JoinedChannel tablosu kaldırıldı - hiçbir yerde kullanılmıyordu
 
 // Anahtar kelimeler
 model Keyword {
