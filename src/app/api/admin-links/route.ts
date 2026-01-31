@@ -1,53 +1,144 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminLinks, addAdminLink, removeAdminLink } from "@/lib/db";
+import { prisma } from "@/lib/db";
+import { getSession } from "@/lib/auth";
 
+// GET - Get admin links for current user
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const adminId = searchParams.get("admin_id");
-    const channelId = searchParams.get("channel_id");
-
-    if (!adminId) {
-      return NextResponse.json({ error: "admin_id is required" }, { status: 400 });
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const links = await getAdminLinks(Number(adminId), channelId ? Number(channelId) : undefined);
-    return NextResponse.json(links);
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get("user_id");
+
+    // Superadmin can view any user's links
+    let targetUserId = session.userId;
+    if (userId && session.role === "superadmin") {
+      targetUserId = parseInt(userId);
+    }
+
+    const links = await prisma.adminLink.findMany({
+      where: { userId: targetUserId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return NextResponse.json(
+      links.map((link) => ({
+        id: link.id,
+        channel_id: link.channelId.toString(),
+        link_code: link.linkCode,
+        link_url: link.linkUrl,
+        created_at: link.createdAt,
+      }))
+    );
   } catch (error) {
     console.error("Error fetching admin links:", error);
     return NextResponse.json({ error: "Failed to fetch admin links" }, { status: 500 });
   }
 }
 
+// POST - Add admin link
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { admin_id, channel_id, link_code, link_url } = body;
-
-    if (!admin_id || !channel_id || !link_code || !link_url) {
-      return NextResponse.json({ error: "admin_id, channel_id, link_code, and link_url are required" }, { status: 400 });
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await addAdminLink(Number(admin_id), Number(channel_id), link_code, link_url);
-    return NextResponse.json({ success: true });
+    const body = await request.json();
+    const { channel_id, link_code, link_url, user_id } = body;
+
+    if (!channel_id || !link_code || !link_url) {
+      return NextResponse.json(
+        { error: "channel_id, link_code, and link_url are required" },
+        { status: 400 }
+      );
+    }
+
+    // Superadmin can add links for any user
+    let targetUserId = session.userId;
+    if (user_id && session.role === "superadmin") {
+      targetUserId = parseInt(user_id);
+    }
+
+    // Verify user has access to this channel
+    const userChannel = await prisma.userChannel.findFirst({
+      where: {
+        userId: targetUserId,
+        channelId: BigInt(channel_id),
+      },
+    });
+
+    if (!userChannel && session.role !== "superadmin") {
+      return NextResponse.json(
+        { error: "Bu kanala erisim izniniz yok" },
+        { status: 403 }
+      );
+    }
+
+    const link = await prisma.adminLink.upsert({
+      where: {
+        userId_channelId_linkCode: {
+          userId: targetUserId,
+          channelId: BigInt(channel_id),
+          linkCode: link_code,
+        },
+      },
+      update: { linkUrl: link_url },
+      create: {
+        userId: targetUserId,
+        channelId: BigInt(channel_id),
+        linkCode: link_code,
+        linkUrl: link_url,
+      },
+    });
+
+    return NextResponse.json({
+      id: link.id,
+      channel_id: link.channelId.toString(),
+      link_code: link.linkCode,
+      link_url: link.linkUrl,
+    });
   } catch (error) {
     console.error("Error adding admin link:", error);
     return NextResponse.json({ error: "Failed to add admin link" }, { status: 500 });
   }
 }
 
+// DELETE - Remove admin link
 export async function DELETE(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const adminId = searchParams.get("admin_id");
-    const channelId = searchParams.get("channel_id");
-    const linkCode = searchParams.get("link_code");
-
-    if (!adminId || !channelId || !linkCode) {
-      return NextResponse.json({ error: "admin_id, channel_id, and link_code are required" }, { status: 400 });
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await removeAdminLink(Number(adminId), Number(channelId), linkCode);
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+
+    if (!id) {
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
+    }
+
+    // Check if link belongs to user or user is superadmin
+    const link = await prisma.adminLink.findUnique({
+      where: { id: parseInt(id) },
+    });
+
+    if (!link) {
+      return NextResponse.json({ error: "Link bulunamadi" }, { status: 404 });
+    }
+
+    if (link.userId !== session.userId && session.role !== "superadmin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    await prisma.adminLink.delete({
+      where: { id: parseInt(id) },
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error removing admin link:", error);
