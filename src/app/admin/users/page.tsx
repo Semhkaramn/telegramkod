@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +21,11 @@ interface User {
   username: string;
   displayName: string | null;
   role: string;
+  isActive: boolean;
+  isBanned: boolean;
+  bannedAt: string | null;
+  bannedReason: string | null;
+  botEnabled: boolean;
   createdAt: string;
   updatedAt: string;
   _count: {
@@ -32,6 +38,9 @@ export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [banDialogOpen, setBanDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [banReason, setBanReason] = useState("");
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [formData, setFormData] = useState({
     username: "",
@@ -128,11 +137,87 @@ export default function UsersPage() {
     }
   };
 
+  const handleToggleBotEnabled = async (user: User) => {
+    try {
+      const res = await fetch(`/api/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ botEnabled: !user.botEnabled }),
+      });
+      if (res.ok) {
+        fetchUsers();
+      }
+    } catch (error) {
+      console.error("Error toggling bot:", error);
+    }
+  };
+
+  const handleBanUser = async () => {
+    if (!selectedUser) return;
+
+    try {
+      const res = await fetch(`/api/users/${selectedUser.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          isBanned: true,
+          bannedReason: banReason || "Sebep belirtilmedi"
+        }),
+      });
+      if (res.ok) {
+        setBanDialogOpen(false);
+        setSelectedUser(null);
+        setBanReason("");
+        fetchUsers();
+      }
+    } catch (error) {
+      console.error("Error banning user:", error);
+    }
+  };
+
+  const handleUnbanUser = async (user: User) => {
+    if (!confirm(`${user.displayName || user.username} kullanıcısının banını kaldırmak istediginizden emin misiniz?`)) return;
+
+    try {
+      const res = await fetch(`/api/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isBanned: false }),
+      });
+      if (res.ok) {
+        fetchUsers();
+      }
+    } catch (error) {
+      console.error("Error unbanning user:", error);
+    }
+  };
+
+  const handleToggleActive = async (user: User) => {
+    try {
+      const res = await fetch(`/api/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !user.isActive }),
+      });
+      if (res.ok) {
+        fetchUsers();
+      }
+    } catch (error) {
+      console.error("Error toggling active:", error);
+    }
+  };
+
   const openNewUserDialog = () => {
     setEditingUser(null);
     setFormData({ username: "", password: "", displayName: "", role: "user" });
     setError("");
     setDialogOpen(true);
+  };
+
+  const openBanDialog = (user: User) => {
+    setSelectedUser(user);
+    setBanReason("");
+    setBanDialogOpen(true);
   };
 
   if (loading) {
@@ -245,11 +330,53 @@ export default function UsersPage() {
         </Dialog>
       </div>
 
+      {/* Ban Dialog */}
+      <Dialog open={banDialogOpen} onOpenChange={setBanDialogOpen}>
+        <DialogContent className="bg-zinc-900 border-zinc-800">
+          <DialogHeader>
+            <DialogTitle className="text-zinc-100">Kullanıcıyı Banla</DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              {selectedUser?.displayName || selectedUser?.username} kullanıcısını banlamak uzeresiniz.
+              Banlanan kullanıcı giris yapamaz ve kanallarına kod gonderilmez.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-zinc-300">Ban Sebebi (Opsiyonel)</label>
+              <Input
+                value={banReason}
+                onChange={(e) => setBanReason(e.target.value)}
+                className="bg-zinc-800 border-zinc-700 text-zinc-100"
+                placeholder="Ornek: Kural ihlali"
+              />
+            </div>
+            <div className="flex gap-3 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setBanDialogOpen(false)}
+                className="flex-1 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              >
+                Iptal
+              </Button>
+              <Button
+                onClick={handleBanUser}
+                className="flex-1 bg-red-600 text-white hover:bg-red-700"
+              >
+                Banla
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Card className="bg-zinc-900 border-zinc-800">
         <CardHeader>
           <CardTitle className="text-zinc-100">Kullanıcı Listesi</CardTitle>
           <CardDescription className="text-zinc-400">
-            Toplam {users.length} kullanıcı
+            Toplam {users.length} kullanıcı |
+            {" "}{users.filter(u => u.botEnabled && !u.isBanned).length} aktif bot |
+            {" "}{users.filter(u => u.isBanned).length} banlı
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -260,14 +387,22 @@ export default function UsersPage() {
               users.map((user) => (
                 <div
                   key={user.id}
-                  className="flex items-center justify-between p-4 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 transition-colors"
+                  className={`flex items-center justify-between p-4 rounded-lg transition-colors ${
+                    user.isBanned
+                      ? "bg-red-500/10 border border-red-500/20"
+                      : "bg-zinc-800/50 hover:bg-zinc-800"
+                  }`}
                 >
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center text-zinc-300 font-medium">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-medium ${
+                      user.isBanned
+                        ? "bg-red-500/20 text-red-400"
+                        : "bg-zinc-700 text-zinc-300"
+                    }`}>
                       {user.displayName?.[0]?.toUpperCase() || user.username[0].toUpperCase()}
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-medium text-zinc-100">{user.displayName || user.username}</p>
                         <Badge
                           variant={user.role === "superadmin" ? "default" : "secondary"}
@@ -275,16 +410,70 @@ export default function UsersPage() {
                         >
                           {user.role === "superadmin" ? "Super Admin" : "Kullanıcı"}
                         </Badge>
+                        {user.isBanned && (
+                          <Badge className="bg-red-500/20 text-red-400 border-red-500/30">
+                            Banlı
+                          </Badge>
+                        )}
+                        {!user.isActive && !user.isBanned && (
+                          <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
+                            Pasif
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-sm text-zinc-500">@{user.username}</p>
+                      {user.isBanned && user.bannedReason && (
+                        <p className="text-xs text-red-400 mt-1">Sebep: {user.bannedReason}</p>
+                      )}
                     </div>
                   </div>
+
                   <div className="flex items-center gap-6">
+                    {/* Bot Toggle */}
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="text-xs text-zinc-500">Bot</span>
+                      <Switch
+                        checked={user.botEnabled}
+                        onCheckedChange={() => handleToggleBotEnabled(user)}
+                        disabled={user.isBanned || user.role === "superadmin"}
+                        className="data-[state=checked]:bg-green-600"
+                      />
+                    </div>
+
+                    {/* Stats */}
                     <div className="text-right">
                       <p className="text-sm text-zinc-400">{user._count.channels} Kanal</p>
                       <p className="text-xs text-zinc-500">{user._count.adminLinks} Link</p>
                     </div>
+
+                    {/* Actions */}
                     <div className="flex gap-2">
+                      {/* Active Toggle */}
+                      {!user.isBanned && user.role !== "superadmin" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleToggleActive(user)}
+                          className={user.isActive
+                            ? "border-zinc-700 text-zinc-300 hover:bg-zinc-700"
+                            : "border-green-500/30 text-green-400 hover:bg-green-500/10"
+                          }
+                          title={user.isActive ? "Pasif Yap" : "Aktif Yap"}
+                        >
+                          {user.isActive ? (
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="10" />
+                              <line x1="4" y1="4" x2="20" y2="20" />
+                            </svg>
+                          ) : (
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                        </Button>
+                      )}
+
+                      {/* Edit */}
                       <Button
                         size="sm"
                         variant="outline"
@@ -296,6 +485,39 @@ export default function UsersPage() {
                           <path d="m15 5 4 4" />
                         </svg>
                       </Button>
+
+                      {/* Ban/Unban */}
+                      {user.role !== "superadmin" && (
+                        user.isBanned ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleUnbanUser(user)}
+                            className="border-green-500/30 text-green-400 hover:bg-green-500/10"
+                            title="Banı Kaldır"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
+                              <path d="m9 12 2 2 4-4" />
+                            </svg>
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openBanDialog(user)}
+                            className="border-orange-500/30 text-orange-400 hover:bg-orange-500/10"
+                            title="Banla"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="10" />
+                              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                            </svg>
+                          </Button>
+                        )
+                      )}
+
+                      {/* Delete */}
                       <Button
                         size="sm"
                         variant="outline"
@@ -314,6 +536,19 @@ export default function UsersPage() {
               ))
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Info Card */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardHeader>
+          <CardTitle className="text-zinc-100 text-lg">Bilgi</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm text-zinc-400">
+          <p><strong className="text-zinc-200">Bot Switch:</strong> Kullanıcının botunu ac/kapat. Kapalıyken kullanıcının kanallarına kod gonderilmez.</p>
+          <p><strong className="text-zinc-200">Pasif Yap:</strong> Kullanıcı giris yapabilir ama bot calısmaz.</p>
+          <p><strong className="text-zinc-200">Banla:</strong> Kullanıcı giris yapamaz ve bot calısmaz. Tum kanallar otomatik durdurulur.</p>
+          <p><strong className="text-zinc-200">Not:</strong> Yeni kullanıcı olusturulduğunda bot varsayılan olarak KAPALI baslar. Manuel olarak acmanız gerekir.</p>
         </CardContent>
       </Card>
     </div>
