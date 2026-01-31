@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { invalidateCache } from "@/lib/cache";
 
 // GET - Get admin links for current user
 export async function GET(request: NextRequest) {
@@ -97,6 +98,9 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Cache'i invalidate et - bot yeni linki görecek
+    await invalidateCache();
+
     return NextResponse.json({
       id: link.id,
       channel_id: link.channelId.toString(),
@@ -143,6 +147,9 @@ export async function DELETE(request: NextRequest) {
     await prisma.adminLink.delete({
       where: { id: parseInt(id) },
     });
+
+    // Cache'i invalidate et
+    await invalidateCache();
 
     return NextResponse.json({ success: true });
   } catch (error) {
