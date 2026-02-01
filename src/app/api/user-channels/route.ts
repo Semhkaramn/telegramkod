@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { invalidateCache } from "@/lib/cache";
+import { refreshChannelsInBackground } from "@/lib/telegram";
 
 // Channel tipi - Prisma şemasına uygun
 interface ChannelWithStats {
@@ -100,6 +101,16 @@ export async function GET(request: NextRequest) {
         })),
       },
     }));
+
+    // Issue #19: Arka planda kanal bilgilerini güncelle (site her yüklendiğinde)
+    // Bu işlem bloklama yapmaz, response hemen döner
+    if (userChannels.length > 0) {
+      const channelIds = userChannels.map((uc) => uc.channel.channelId);
+      // Arka planda çalıştır - await yok, response'ı bekletmez
+      refreshChannelsInBackground(channelIds).catch((err) => {
+        console.error("Background channel refresh error:", err);
+      });
+    }
 
     return NextResponse.json(serializedChannels);
   } catch (error) {
