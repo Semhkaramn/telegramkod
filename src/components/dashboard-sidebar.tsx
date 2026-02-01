@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   Radio,
   Link2,
-  BarChart3,
   Settings,
   LogOut,
   ArrowLeft,
@@ -42,11 +41,6 @@ const navItems = [
     title: "Link Ozellestirme",
     href: "/dashboard/links",
     icon: Link2,
-  },
-  {
-    title: "Istatistikler",
-    href: "/dashboard/stats",
-    icon: BarChart3,
   },
   {
     title: "Ayarlar",
