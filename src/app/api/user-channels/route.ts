@@ -5,19 +5,13 @@ import { invalidateCache } from "@/lib/cache";
 import { refreshChannelsInBackground } from "@/lib/telegram";
 
 // Channel tipi - Prisma şemasına uygun
-interface ChannelWithStats {
+interface ChannelData {
   channelId: bigint;
   channelName: string | null;
   channelUsername: string | null;
   channelPhoto: string | null;
   memberCount: number | null;
   isJoined: boolean;
-  stats: {
-    id: number;
-    channelId: bigint;
-    statDate: Date;
-    dailyCount: number;
-  }[];
 }
 
 interface UserChannelWithChannel {
@@ -25,7 +19,7 @@ interface UserChannelWithChannel {
   userId: number;
   channelId: bigint;
   paused: boolean;
-  channel: ChannelWithStats;
+  channel: ChannelData;
 }
 
 // GET - Kullanıcının kanallarını getir
