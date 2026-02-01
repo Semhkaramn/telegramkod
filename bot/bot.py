@@ -41,7 +41,9 @@ KEYWORDS = {
     "pusula",
     "pusulabet",
     "turbo",
-    "megabahis"
+    "turboslot",
+    "megabahis",
+    "matbet"
 }
 
 BANNED_WORDS = {
