@@ -5,14 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Radio, BarChart3, Calendar, TrendingUp, AlertTriangle } from "lucide-react";
-
-interface ChannelStats {
-  id: number;
-  channelId: string;
-  statDate: string;
-  dailyCount: number;
-}
+import { Radio, AlertTriangle } from "lucide-react";
 
 interface Channel {
   channelId: string;
@@ -20,7 +13,7 @@ interface Channel {
   channelUsername: string | null;
   channelPhoto: string | null;
   memberCount: number | null;
-  stats: ChannelStats[];
+  isJoined: boolean;
 }
 
 interface UserChannel {
@@ -35,28 +28,6 @@ interface UserInfo {
   botEnabled: boolean;
   isBanned: boolean;
 }
-
-// Timezone-safe tarih karşılaştırma fonksiyonları
-const getIstanbulDate = (date: Date): string => {
-  // İstanbul timezone'unda YYYY-MM-DD formatında tarih al
-  return date.toLocaleDateString('sv-SE', { timeZone: 'Europe/Istanbul' });
-};
-
-const getIstanbulToday = (): string => {
-  return getIstanbulDate(new Date());
-};
-
-const getIstanbulDateMinusDays = (days: number): string => {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  return getIstanbulDate(date);
-};
-
-const normalizeStatDate = (statDate: string): string => {
-  // API'den gelen ISO tarihini YYYY-MM-DD formatına çevir
-  // Örnek: "2024-01-15T00:00:00.000Z" -> "2024-01-15"
-  return statDate.split("T")[0];
-};
 
 export default function DashboardPage() {
   const [userChannels, setUserChannels] = useState<UserChannel[]>([]);
@@ -126,40 +97,6 @@ export default function DashboardPage() {
     }
   };
 
-  // İstatistik hesaplamalari - Timezone-safe
-  const today = getIstanbulToday();
-  const weekAgo = getIstanbulDateMinusDays(7);
-  const monthAgo = getIstanbulDateMinusDays(30);
-
-  const calculateStats = () => {
-    let todayTotal = 0;
-    let weekTotal = 0;
-    let monthTotal = 0;
-
-    userChannels.forEach((uc) => {
-      uc.channel.stats.forEach((stat) => {
-        const statDate = normalizeStatDate(stat.statDate);
-        if (statDate === today) {
-          todayTotal += stat.dailyCount;
-        }
-        if (statDate >= weekAgo) {
-          weekTotal += stat.dailyCount;
-        }
-        if (statDate >= monthAgo) {
-          monthTotal += stat.dailyCount;
-        }
-      });
-    });
-
-    return { todayTotal, weekTotal, monthTotal };
-  };
-
-  const getChannelTodayStats = (channel: Channel) => {
-    const todayStat = channel.stats.find((s) => normalizeStatDate(s.statDate) === today);
-    return todayStat?.dailyCount || 0;
-  };
-
-  const { todayTotal, weekTotal, monthTotal } = calculateStats();
   const activeChannels = userChannels.filter((uc) => !uc.paused).length;
   const pausedChannels = userChannels.filter((uc) => uc.paused).length;
 
@@ -199,7 +136,7 @@ export default function DashboardPage() {
       )}
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card className="border-slate-700/50 bg-slate-900/50 backdrop-blur-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-slate-400">
@@ -218,39 +155,26 @@ export default function DashboardPage() {
         <Card className="border-slate-700/50 bg-slate-900/50 backdrop-blur-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-slate-400">
-              Bugun Gonderilen
+              Aktif Kanallar
             </CardTitle>
-            <Calendar className="h-4 w-4 text-blue-500" />
+            <Radio className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{todayTotal}</div>
-            <p className="text-xs text-slate-500">kod gonderildi</p>
+            <div className="text-2xl font-bold text-white">{activeChannels}</div>
+            <p className="text-xs text-slate-500">kanal aktif durumda</p>
           </CardContent>
         </Card>
 
         <Card className="border-slate-700/50 bg-slate-900/50 backdrop-blur-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-slate-400">
-              Bu Hafta
+              Duraklatilmis
             </CardTitle>
-            <BarChart3 className="h-4 w-4 text-blue-500" />
+            <Radio className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{weekTotal}</div>
-            <p className="text-xs text-slate-500">kod gonderildi</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-700/50 bg-slate-900/50 backdrop-blur-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">
-              Bu Ay
-            </CardTitle>
-            <TrendingUp className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-white">{monthTotal}</div>
-            <p className="text-xs text-slate-500">kod gonderildi</p>
+            <div className="text-2xl font-bold text-white">{pausedChannels}</div>
+            <p className="text-xs text-slate-500">kanal durdurulmus</p>
           </CardContent>
         </Card>
       </div>
@@ -274,7 +198,6 @@ export default function DashboardPage() {
               {userChannels.map((uc) => {
                 const isUpdating = updating === uc.channelId;
                 const canToggle = userInfo?.botEnabled || !uc.paused;
-                const todayCount = getChannelTodayStats(uc.channel);
 
                 return (
                   <div
@@ -303,10 +226,6 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
-                      <div className="text-right hidden sm:block">
-                        <p className="text-sm text-white">{todayCount} kod</p>
-                        <p className="text-xs text-slate-500">bugun</p>
-                      </div>
                       <Badge
                         variant={uc.paused ? "destructive" : "default"}
                         className={uc.paused ? "bg-red-500/20 text-red-400 border border-red-500/30" : "bg-blue-600 hover:bg-blue-700"}
