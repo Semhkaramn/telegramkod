@@ -3,8 +3,17 @@ import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
 import { prisma } from "./db";
 
+// Issue #13 fix: Fallback secret kaldırıldı - production'da JWT_SECRET zorunlu
+const jwtSecretValue = process.env.JWT_SECRET;
+if (!jwtSecretValue) {
+  console.error("❌ KRİTİK HATA: JWT_SECRET environment variable tanımlanmamış!");
+  // Development'ta uyarı ver ama çalışmaya devam et
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("JWT_SECRET must be set in production environment");
+  }
+}
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "fallback-secret-key-change-in-production"
+  jwtSecretValue || "dev-only-fallback-DO-NOT-USE-IN-PRODUCTION"
 );
 
 export interface SessionPayload {
@@ -78,14 +87,36 @@ export async function getCurrentUser() {
   return user;
 }
 
-export async function setImpersonation(targetUserId: number): Promise<void> {
+export async function setImpersonation(targetUserId: number): Promise<{ success: boolean; error?: string }> {
   const session = await getSession();
-  if (!session || session.role !== "superadmin") return;
+  if (!session || session.role !== "superadmin") {
+    return { success: false, error: "Yetkisiz erişim" };
+  }
+
+  // Issue #9 fix: Hedef kullanıcının var olduğunu kontrol et
+  const targetUser = await prisma.user.findUnique({
+    where: { id: targetUserId },
+    select: { id: true, isActive: true, isBanned: true },
+  });
+
+  if (!targetUser) {
+    return { success: false, error: "Hedef kullanıcı bulunamadı" };
+  }
+
+  if (!targetUser.isActive) {
+    return { success: false, error: "Hedef kullanıcı aktif değil" };
+  }
+
+  if (targetUser.isBanned) {
+    return { success: false, error: "Hedef kullanıcı yasaklı" };
+  }
 
   await createSession({
     ...session,
     impersonatingUserId: targetUserId,
   });
+
+  return { success: true };
 }
 
 export async function clearImpersonation(): Promise<void> {
