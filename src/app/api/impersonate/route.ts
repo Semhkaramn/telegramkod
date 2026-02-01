@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getSession();
     if (!session || session.role !== "superadmin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: "Yetkisiz erisim" }, { status: 403 });
     }
 
     const body = await request.json();
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
 
     if (!targetUserId) {
       return NextResponse.json(
-        { error: "targetUserId is required" },
+        { error: "targetUserId gerekli" },
         { status: 400 }
       );
     }
@@ -27,17 +27,24 @@ export async function POST(request: NextRequest) {
 
     if (!targetUser) {
       return NextResponse.json(
-        { error: "User not found" },
+        { error: "Kullanici bulunamadi" },
         { status: 404 }
       );
     }
 
-    // Impersonation başlat
-    await setImpersonation(parseInt(targetUserId));
+    // Impersonation başlat ve sonucu kontrol et
+    const result = await setImpersonation(parseInt(targetUserId));
+
+    if (!result.success) {
+      return NextResponse.json(
+        { error: result.error || "Impersonation basarilamadi" },
+        { status: 400 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
-      message: `Now viewing as ${targetUser.displayName || targetUser.username}`,
+      message: `Simdi ${targetUser.displayName || targetUser.username} olarak goruntuleniyor`,
       user: {
         id: targetUser.id,
         username: targetUser.username,
@@ -47,7 +54,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Error starting impersonation:", error);
     return NextResponse.json(
-      { error: "Failed to start impersonation" },
+      { error: "Impersonation baslatilamadi" },
       { status: 500 }
     );
   }
@@ -58,19 +65,19 @@ export async function DELETE() {
   try {
     const session = await getSession();
     if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "Yetkisiz erisim" }, { status: 401 });
     }
 
     await clearImpersonation();
 
     return NextResponse.json({
       success: true,
-      message: "Returned to your own panel",
+      message: "Kendi panelinize geri donuldu",
     });
   } catch (error) {
     console.error("Error clearing impersonation:", error);
     return NextResponse.json(
-      { error: "Failed to clear impersonation" },
+      { error: "Impersonation sonlandirilamadi" },
       { status: 500 }
     );
   }
