@@ -289,10 +289,10 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // BigInt parse hatası yakalama
+    // Telegram'dan dönen ID'yi kullan (doğru ve normalize edilmiş ID)
     let parsedChannelId: bigint;
     try {
-      parsedChannelId = BigInt(channel_id);
+      parsedChannelId = BigInt(info.id);
     } catch {
       return NextResponse.json({ error: "Gecersiz kanal ID formati" }, { status: 400 });
     }
