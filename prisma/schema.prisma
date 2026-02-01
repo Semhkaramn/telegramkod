@@ -15,15 +15,14 @@ model User {
   password     String
   displayName  String?   @map("display_name")
   role         String    @default("user") // "superadmin" veya "user"
-  isActive     Boolean   @default(true) @map("is_active")      // Hesap aktif mi?
-  isBanned     Boolean   @default(false) @map("is_banned")     // Kullanıcı banlandı mı?
-  bannedAt     DateTime? @map("banned_at")                      // Ban tarihi
-  bannedReason String?   @map("banned_reason")                  // Ban sebebi
-  botEnabled   Boolean   @default(false) @map("bot_enabled")   // Bot bu kullanıcı için aktif mi? (varsayılan KAPALI)
+  isActive     Boolean   @default(true) @map("is_active")
+  isBanned     Boolean   @default(false) @map("is_banned")
+  bannedAt     DateTime? @map("banned_at")
+  bannedReason String?   @map("banned_reason")
+  botEnabled   Boolean   @default(false) @map("bot_enabled")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  // İlişkiler
   channels   UserChannel[]
   adminLinks AdminLink[]
 
@@ -35,7 +34,7 @@ model UserChannel {
   id        Int     @id @default(autoincrement())
   userId    Int     @map("user_id")
   channelId BigInt  @map("channel_id")
-  paused    Boolean @default(true)  // Varsayılan KAPALI - kullanıcı açmalı
+  paused    Boolean @default(true)
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   channel Channel @relation(fields: [channelId], references: [channelId], onDelete: Cascade)
@@ -48,27 +47,18 @@ model UserChannel {
 model Channel {
   channelId       BigInt   @id @map("channel_id")
   channelName     String?  @map("channel_name")
-  channelUsername String?  @map("channel_username")   // @username
-  channelPhoto    String?  @map("channel_photo")      // Kanal fotoğrafı URL
-  memberCount     Int?     @map("member_count")       // Üye sayısı
-  description     String?  @map("description")        // Kanal açıklaması
-  isJoined        Boolean  @default(false) @map("is_joined")  // Bot bu kanala katıldı mı?
-  joinError       String?  @map("join_error")                  // Katılım hatası varsa
-  lastUpdated     DateTime @default(now()) @map("last_updated") // Son güncelleme tarihi
+  channelUsername String?  @map("channel_username")
+  channelPhoto    String?  @map("channel_photo")
+  memberCount     Int?     @map("member_count")
+  description     String?  @map("description")
+  isJoined        Boolean  @default(false) @map("is_joined")
+  joinError       String?  @map("join_error")
+  lastUpdated     DateTime @default(now()) @map("last_updated")
   createdAt       DateTime @default(now()) @map("created_at")
 
   userChannels UserChannel[]
-  stats        ChannelStats[]
 
   @@map("channels")
-}
-
-// Dinleme kanalları - sadece channel_id ve channel_name
-model ListeningChannel {
-  channelId   BigInt   @id @map("channel_id")
-  channelName String?  @map("channel_name")
-
-  @@map("listening_channels")
 }
 
 // Admin linkleri (kullanıcı bazlı link özelleştirme)
@@ -84,76 +74,4 @@ model AdminLink {
 
   @@unique([userId, channelId, linkCode])
   @@map("admin_links")
-}
-
-// Kanal istatistikleri
-model ChannelStats {
-  id          Int      @id @default(autoincrement())
-  channelId   BigInt   @map("channel_id")
-  statDate    DateTime @map("stat_date") @db.Date
-  dailyCount  Int      @default(0) @map("daily_count")
-  lastUpdated DateTime @default(now()) @map("last_updated")
-
-  channel Channel @relation(fields: [channelId], references: [channelId], onDelete: Cascade)
-
-  @@unique([channelId, statDate])
-  @@map("channel_stats")
-}
-
-// Gönderilmiş kodlar (1 saat cache)
-model SentCode {
-  code   String   @id
-  sentAt DateTime @default(now()) @map("sent_at")
-
-  @@map("sent_codes")
-}
-
-// JoinedChannel tablosu kaldırıldı - hiçbir yerde kullanılmıyordu
-
-// Anahtar kelimeler
-model Keyword {
-  id      Int    @id @default(autoincrement())
-  keyword String @unique
-
-  @@map("keywords")
-}
-
-// Yasak kelimeler
-model BannedWord {
-  id   Int    @id @default(autoincrement())
-  word String @unique
-
-  @@map("banned_words")
-}
-
-// Bot durumu ve logları
-model BotStatus {
-  id          Int      @id @default(autoincrement())
-  isRunning   Boolean  @default(false) @map("is_running")
-  lastPing    DateTime? @map("last_ping")
-  lastError   String?  @map("last_error")
-  startedAt   DateTime? @map("started_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  @@map("bot_status")
-}
-
-// Bot logları
-model BotLog {
-  id        Int      @id @default(autoincrement())
-  level     String   @default("info") // info, warning, error
-  message   String
-  details   String?
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@map("bot_logs")
-}
-
-// Cache versiyon kontrolü - website değişiklik yapınca version artar, bot kontrol eder
-model CacheVersion {
-  id        Int      @id @default(1)
-  version   Int      @default(1)
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@map("cache_version")
 }
