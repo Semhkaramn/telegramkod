@@ -767,8 +767,13 @@ async def message_handler(event):
         print(f"❌ Handler hatası: {e}")
 
 # —————— KEEP ALIVE ——————
+# Dialog yenileme sayacı
+dialog_refresh_counter = 0
+DIALOG_REFRESH_INTERVAL = 30  # Her 30 dakikada bir dialogs yenile (30 * 60 saniye = 1800 saniye, 60 saniyede bir kontrol = 30 iterasyon)
+
 async def keep_alive():
     """Bot'u canlı tut ve cache'i kontrol et"""
+    global dialog_refresh_counter
     while True:
         try:
             await client.get_me()
@@ -777,6 +782,17 @@ async def keep_alive():
             await run_sync(update_bot_status, True)
             # Cache version kontrolü yap
             await run_sync(check_and_refresh_cache)
+
+            # Periyodik dialog yenileme - yeni eklenen kanallar için
+            dialog_refresh_counter += 1
+            if dialog_refresh_counter >= DIALOG_REFRESH_INTERVAL:
+                dialog_refresh_counter = 0
+                try:
+                    dialogs = await client.get_dialogs()
+                    print(f"🔄 Dialogs yenilendi: {len(dialogs)} dialog")
+                except Exception as e:
+                    print(f"⚠️ Dialog yenileme hatası: {e}")
+
         except Exception as e:
             print(f"⚠️ Keep alive hatası: {e}")
             await run_sync(update_bot_status, True, str(e)[:200])
@@ -816,10 +832,51 @@ async def main():
         print("🔄 Cache sistemi başlatılıyor...")
         refresh_all_caches()
 
+        # ÖNEMLİ: Telethon'un tüm kanalları görebilmesi için dialogs yükle
+        # Bu olmadan bazı kanallardan mesaj alınamaz (access hash eksik olur)
+        print("📋 Telegram dialogs yükleniyor...")
+        dialogs = await client.get_dialogs()
+        print(f"✅ {len(dialogs)} dialog yüklendi")
+
+        # Dinleme kanallarına erişimi kontrol et
+        listening_channel_ids = set(listening_channels_cache)
+        accessible_channels = 0
+        inaccessible_channels = []
+
+        for dialog in dialogs:
+            if dialog.entity and hasattr(dialog.entity, 'id'):
+                entity_id = dialog.entity.id
+                # Farklı ID formatlarını kontrol et
+                if entity_id in listening_channel_ids or \
+                   -entity_id in listening_channel_ids or \
+                   int(f"-100{entity_id}") in listening_channel_ids or \
+                   (entity_id < 0 and -int(str(entity_id)[4:]) if str(entity_id).startswith('-100') else 0) in listening_channel_ids:
+                    accessible_channels += 1
+
+        # Erişilemeyen kanalları bul
+        for ch_id in listening_channels_cache:
+            found = False
+            for dialog in dialogs:
+                if dialog.entity and hasattr(dialog.entity, 'id'):
+                    entity_id = dialog.entity.id
+                    normalized = int(f"-100{entity_id}") if entity_id > 0 else entity_id
+                    if ch_id == entity_id or ch_id == normalized or ch_id == -entity_id:
+                        found = True
+                        break
+            if not found:
+                inaccessible_channels.append(ch_id)
+
+        if inaccessible_channels:
+            print(f"⚠️ ERİŞİLEMEYEN KANALLAR ({len(inaccessible_channels)} adet):")
+            for ch_id in inaccessible_channels:
+                print(f"   ❌ {ch_id} - Bu kanala katılın veya ID'yi kontrol edin!")
+            log_bot_message("warning", f"Erişilemeyen kanallar: {len(inaccessible_channels)}", str(inaccessible_channels)[:500])
+
         # Dinleme kanallarını göster
-        print(f"📡 Dinleme kanalları: {len(listening_channels_cache)}")
+        print(f"📡 Dinleme kanalları: {len(listening_channels_cache)} (erişilebilir: {accessible_channels})")
         for ch in listening_channels_cache:
-            print(f"   • {ch}")
+            status = "✅" if ch not in inaccessible_channels else "❌"
+            print(f"   {status} {ch}")
 
         # Aktif hedef kanalları göster
         print(f"📢 Hedef kanallar: {len(active_channels_cache)}")
