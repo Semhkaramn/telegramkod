@@ -394,8 +394,7 @@ else:
 # Connection pooling ve keep-alive için limits ayarla
 http_client = httpx.AsyncClient(
     timeout=httpx.Timeout(5.0, connect=2.0),  # 5 saniye toplam, 2 saniye bağlantı
-    limits=httpx.Limits(max_keepalive_connections=20, max_connections=50),
-    http2=True  # HTTP/2 daha hızlı
+    limits=httpx.Limits(max_keepalive_connections=20, max_connections=50)
 )
 
 # —————— TELEGRAM BOT API ——————
