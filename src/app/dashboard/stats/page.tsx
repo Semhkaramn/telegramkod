@@ -39,6 +39,28 @@ interface UserChannel {
 
 type TimeRange = "today" | "week" | "month";
 
+// Timezone-safe tarih karşılaştırma fonksiyonları (İstanbul)
+const getIstanbulDate = (date: Date): string => {
+  // İstanbul timezone'unda YYYY-MM-DD formatında tarih al
+  return date.toLocaleDateString('sv-SE', { timeZone: 'Europe/Istanbul' });
+};
+
+const getIstanbulToday = (): string => {
+  return getIstanbulDate(new Date());
+};
+
+const getIstanbulDateMinusDays = (days: number): string => {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return getIstanbulDate(date);
+};
+
+const normalizeStatDate = (statDate: string): string => {
+  // API'den gelen ISO tarihini YYYY-MM-DD formatına çevir
+  // Örnek: "2024-01-15T00:00:00.000Z" -> "2024-01-15"
+  return statDate.split("T")[0];
+};
+
 export default function StatsPage() {
   const [userChannels, setUserChannels] = useState<UserChannel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,44 +85,40 @@ export default function StatsPage() {
   };
 
   const getDateRange = (range: TimeRange) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = getIstanbulToday();
 
     switch (range) {
       case "today":
-        return { start: today, label: "Bugun" };
+        return { startDate: today, label: "Bugun" };
       case "week":
-        const weekAgo = new Date(today);
-        weekAgo.setDate(weekAgo.getDate() - 7);
-        return { start: weekAgo, label: "Son 7 Gun" };
+        return { startDate: getIstanbulDateMinusDays(7), label: "Son 7 Gun" };
       case "month":
-        const monthAgo = new Date(today);
-        monthAgo.setDate(monthAgo.getDate() - 30);
-        return { start: monthAgo, label: "Son 30 Gun" };
+        return { startDate: getIstanbulDateMinusDays(30), label: "Son 30 Gun" };
     }
   };
 
   const calculateChannelStats = (channel: Channel, range: TimeRange) => {
-    const { start } = getDateRange(range);
+    const { startDate } = getDateRange(range);
+    const today = getIstanbulToday();
 
     let total = 0;
 
     channel.stats.forEach((stat) => {
-      const statDate = new Date(stat.statDate);
-      if (statDate >= start) {
+      const statDate = normalizeStatDate(stat.statDate);
+      if (statDate >= startDate && statDate <= today) {
         total += stat.dailyCount;
       }
     });
 
-    // Calculate trend (compare with previous period)
-    const previousStart = new Date(start);
+    // Önceki dönemle karşılaştırma (trend hesaplama)
     const periodLength = range === "today" ? 1 : range === "week" ? 7 : 30;
-    previousStart.setDate(previousStart.getDate() - periodLength);
+    const previousStartDate = getIstanbulDateMinusDays(periodLength * 2);
+    const previousEndDate = getIstanbulDateMinusDays(periodLength);
 
     let previousTotal = 0;
     channel.stats.forEach((stat) => {
-      const statDate = new Date(stat.statDate);
-      if (statDate >= previousStart && statDate < start) {
+      const statDate = normalizeStatDate(stat.statDate);
+      if (statDate >= previousStartDate && statDate < previousEndDate) {
         previousTotal += stat.dailyCount;
       }
     });
@@ -121,25 +139,21 @@ export default function StatsPage() {
     let monthTotal = 0;
     let allTimeTotal = 0;
 
-    const today = new Date().toISOString().split("T")[0];
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .split("T")[0];
-    const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .split("T")[0];
+    const today = getIstanbulToday();
+    const weekAgo = getIstanbulDateMinusDays(7);
+    const monthAgo = getIstanbulDateMinusDays(30);
 
     userChannels.forEach((uc) => {
       uc.channel.stats.forEach((stat) => {
-        const statDate = stat.statDate.split("T")[0];
+        const statDate = normalizeStatDate(stat.statDate);
         allTimeTotal += stat.dailyCount;
         if (statDate === today) {
           todayTotal += stat.dailyCount;
         }
-        if (statDate >= weekAgo) {
+        if (statDate >= weekAgo && statDate <= today) {
           weekTotal += stat.dailyCount;
         }
-        if (statDate >= monthAgo) {
+        if (statDate >= monthAgo && statDate <= today) {
           monthTotal += stat.dailyCount;
         }
       });
