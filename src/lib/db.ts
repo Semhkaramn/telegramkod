@@ -43,8 +43,6 @@ export async function getAllChannels() {
     description: channel.description,
     last_updated: channel.lastUpdated,
     created_at: channel.createdAt,
-    // Kanalın pause durumu: Tüm kullanıcılar durdurulmuşsa durdurulmuş sayılır
-    // Eğer hiç kullanıcı atanmamışsa veya en az bir kullanıcı aktifse, kanal aktiftir
     paused: channel.userChannels.length > 0 && channel.userChannels.every((uc) => uc.paused),
     users: channel.userChannels.map((uc) => ({
       id: uc.user.id,
@@ -141,7 +139,7 @@ export async function assignChannelToUser(userId: number, channelId: number) {
     create: {
       userId,
       channelId: BigInt(channelId),
-      paused: true,  // Varsayılan KAPALI - kod gönderilen kanallar kapalı eklenecek
+      paused: true,
     },
   });
 }
@@ -154,176 +152,6 @@ export async function removeChannelFromUser(userId: number, channelId: number) {
         channelId: BigInt(channelId),
       },
     },
-  });
-}
-
-// ============ STATS FUNCTIONS ============
-
-export async function getDailyStats(channelId: string) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const stats = await prisma.channelStats.findFirst({
-    where: {
-      channelId: BigInt(channelId),
-      statDate: today,
-    },
-  });
-
-  return {
-    daily_count: stats?.dailyCount || 0,
-  };
-}
-
-export async function getWeeklyStats(channelId: string) {
-  const weekAgo = new Date();
-  weekAgo.setDate(weekAgo.getDate() - 7);
-  weekAgo.setHours(0, 0, 0, 0);
-
-  const stats = await prisma.channelStats.findMany({
-    where: {
-      channelId: BigInt(channelId),
-      statDate: { gte: weekAgo },
-    },
-  });
-
-  return stats.reduce((sum, s) => sum + s.dailyCount, 0);
-}
-
-export async function getMonthlyStats(channelId: string) {
-  const monthAgo = new Date();
-  monthAgo.setDate(monthAgo.getDate() - 30);
-  monthAgo.setHours(0, 0, 0, 0);
-
-  const stats = await prisma.channelStats.findMany({
-    where: {
-      channelId: BigInt(channelId),
-      statDate: { gte: monthAgo },
-    },
-  });
-
-  return stats.reduce((sum, s) => sum + s.dailyCount, 0);
-}
-
-export async function getTotalStats() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const weekAgo = new Date();
-  weekAgo.setDate(weekAgo.getDate() - 7);
-  weekAgo.setHours(0, 0, 0, 0);
-
-  const monthAgo = new Date();
-  monthAgo.setDate(monthAgo.getDate() - 30);
-  monthAgo.setHours(0, 0, 0, 0);
-
-  const [dailyStats, weeklyStats, monthlyStats] = await Promise.all([
-    prisma.channelStats.findMany({
-      where: { statDate: today },
-    }),
-    prisma.channelStats.findMany({
-      where: { statDate: { gte: weekAgo } },
-    }),
-    prisma.channelStats.findMany({
-      where: { statDate: { gte: monthAgo } },
-    }),
-  ]);
-
-  return {
-    daily: dailyStats.reduce((sum, s) => sum + s.dailyCount, 0),
-    weekly: weeklyStats.reduce((sum, s) => sum + s.dailyCount, 0),
-    monthly: monthlyStats.reduce((sum, s) => sum + s.dailyCount, 0),
-  };
-}
-
-// ============ LISTENING CHANNELS ============
-
-export async function getAllListeningChannels() {
-  const channels = await prisma.listeningChannel.findMany();
-  return channels.map((c) => ({
-    channel_id: c.channelId.toString(),
-    channel_name: c.channelName,
-  }));
-}
-
-// Alias for API compatibility
-export const getListeningChannels = getAllListeningChannels;
-
-export async function addListeningChannel(
-  channelId: number,
-  channelName?: string
-) {
-  return prisma.listeningChannel.upsert({
-    where: { channelId: BigInt(channelId) },
-    update: {
-      channelName: channelName || null,
-    },
-    create: {
-      channelId: BigInt(channelId),
-      channelName: channelName || null,
-    },
-  });
-}
-
-export async function updateListeningChannel(
-  channelId: number,
-  data: {
-    channelName?: string;
-  }
-) {
-  return prisma.listeningChannel.update({
-    where: { channelId: BigInt(channelId) },
-    data,
-  });
-}
-
-export async function removeListeningChannel(channelId: number) {
-  return prisma.listeningChannel.delete({
-    where: { channelId: BigInt(channelId) },
-  });
-}
-
-// ============ KEYWORDS ============
-
-export async function getAllKeywords() {
-  return prisma.keyword.findMany({
-    orderBy: { id: "asc" },
-  });
-}
-
-export async function addKeyword(keyword: string) {
-  return prisma.keyword.upsert({
-    where: { keyword },
-    update: {},
-    create: { keyword },
-  });
-}
-
-export async function removeKeyword(id: number) {
-  return prisma.keyword.delete({
-    where: { id },
-  });
-}
-
-// ============ BANNED WORDS ============
-
-export async function getAllBannedWords() {
-  return prisma.bannedWord.findMany({
-    orderBy: { id: "asc" },
-  });
-}
-
-export async function addBannedWord(word: string) {
-  return prisma.bannedWord.upsert({
-    where: { word },
-    update: {},
-    create: { word },
-  });
-}
-
-export async function removeBannedWord(id: number) {
-  return prisma.bannedWord.delete({
-    where: { id },
   });
 }
 
@@ -374,7 +202,7 @@ export async function removeAdminLink(id: number) {
   });
 }
 
-// ============ ADMIN FUNCTIONS ============
+// ============ USER/ADMIN FUNCTIONS ============
 
 export async function getAllAdmins() {
   const admins = await prisma.user.findMany({
@@ -396,11 +224,6 @@ export async function getAllAdmins() {
   }));
 }
 
-/**
- * Kullanıcıyı kanala ata
- * NOT: Bu fonksiyon eskiden addAdmin olarak adlandırılıyordu ama
- * aslında UserChannel tablosunda kayıt oluşturuyor
- */
 export async function assignUserToChannel(
   userId: number,
   channelId: number,
@@ -422,17 +245,12 @@ export async function assignUserToChannel(
   });
 }
 
-/**
- * @deprecated assignUserToChannel kullanın
- * Geriye dönük uyumluluk için korunuyor
- */
 export async function addAdmin(
   channelId: number,
   adminId: number,
   _adminUsername?: string | null,
   _adminType?: string
 ) {
-  // Kullanılmayan parametreler (_adminUsername, _adminType) geriye dönük uyumluluk için korunuyor
   return assignUserToChannel(adminId, channelId, true);
 }
 
