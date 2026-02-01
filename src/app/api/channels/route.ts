@@ -303,8 +303,16 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "channel_id gerekli" }, { status: 400 });
     }
 
+    // Issue #10 fix: BigInt parse hatası yakalama
+    let parsedChannelId: bigint;
+    try {
+      parsedChannelId = BigInt(channelId);
+    } catch {
+      return NextResponse.json({ error: "Geçersiz kanal ID formatı" }, { status: 400 });
+    }
+
     await prisma.channel.delete({
-      where: { channelId: BigInt(channelId) },
+      where: { channelId: parsedChannelId },
     });
 
     // Cache'i invalidate et
@@ -332,9 +340,17 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "channel_id ve paused gerekli" }, { status: 400 });
     }
 
+    // Issue #10 fix: BigInt parse hatası yakalama
+    let parsedChannelId: bigint;
+    try {
+      parsedChannelId = BigInt(channel_id);
+    } catch {
+      return NextResponse.json({ error: "Geçersiz kanal ID formatı" }, { status: 400 });
+    }
+
     // Tüm kullanıcılar için pause durumunu güncelle
     await prisma.userChannel.updateMany({
-      where: { channelId: BigInt(channel_id) },
+      where: { channelId: parsedChannelId },
       data: { paused: Boolean(paused) },
     });
 
@@ -372,8 +388,16 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    // Issue #10 fix: BigInt parse hatası yakalama
+    let parsedChannelId: bigint;
+    try {
+      parsedChannelId = BigInt(channel_id);
+    } catch {
+      return NextResponse.json({ error: "Geçersiz kanal ID formatı" }, { status: 400 });
+    }
+
     await prisma.channel.update({
-      where: { channelId: BigInt(channel_id) },
+      where: { channelId: parsedChannelId },
       data: {
         channelName: info.title,
         channelUsername: info.username,
