@@ -36,57 +36,27 @@ export async function GET(request: NextRequest) {
             },
           },
         },
-        stats: {
-          orderBy: { statDate: "desc" },
-        },
       },
       orderBy: { createdAt: "desc" },
     });
 
-    // İstatistikleri hesapla
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    weekAgo.setHours(0, 0, 0, 0);
-
-    const monthAgo = new Date();
-    monthAgo.setDate(monthAgo.getDate() - 30);
-    monthAgo.setHours(0, 0, 0, 0);
-
-    const result = channels.map((channel) => {
-      let daily = 0;
-      let weekly = 0;
-      let monthly = 0;
-      let total = 0;
-
-      channel.stats.forEach((stat) => {
-        total += stat.dailyCount;
-        if (stat.statDate >= today) daily += stat.dailyCount;
-        if (stat.statDate >= weekAgo) weekly += stat.dailyCount;
-        if (stat.statDate >= monthAgo) monthly += stat.dailyCount;
-      });
-
-      return {
-        channel_id: channel.channelId.toString(),
-        channel_name: channel.channelName,
-        channel_username: channel.channelUsername,
-        channel_photo: channel.channelPhoto,
-        member_count: channel.memberCount,
-        description: channel.description,
-        last_updated: channel.lastUpdated,
-        created_at: channel.createdAt,
-        paused: channel.userChannels.length > 0 && channel.userChannels.every((uc) => uc.paused),
-        users: channel.userChannels.map((uc) => ({
-          id: uc.user.id,
-          username: uc.user.username,
-          displayName: uc.user.displayName,
-          paused: uc.paused,
-        })),
-        stats: { daily, weekly, monthly, total },
-      };
-    });
+    const result = channels.map((channel) => ({
+      channel_id: channel.channelId.toString(),
+      channel_name: channel.channelName,
+      channel_username: channel.channelUsername,
+      channel_photo: channel.channelPhoto,
+      member_count: channel.memberCount,
+      description: channel.description,
+      last_updated: channel.lastUpdated,
+      created_at: channel.createdAt,
+      paused: channel.userChannels.length > 0 && channel.userChannels.every((uc) => uc.paused),
+      users: channel.userChannels.map((uc) => ({
+        id: uc.user.id,
+        username: uc.user.username,
+        displayName: uc.user.displayName,
+        paused: uc.paused,
+      })),
+    }));
 
     return NextResponse.json(result);
   } catch (error) {
