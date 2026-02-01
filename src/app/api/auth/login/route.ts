@@ -1,9 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { verifyPassword, createSession } from "@/lib/auth";
+import { checkRateLimit, resetRateLimit, getClientIP } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
+    // Issue #12 fix: Rate limiting kontrolü
+    const clientIP = getClientIP(request);
+    const rateLimitResult = checkRateLimit(clientIP);
+
+    if (!rateLimitResult.success) {
+      const retryAfter = Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000);
+      return NextResponse.json(
+        {
+          error: `Çok fazla başarısız deneme. ${Math.ceil(retryAfter / 60)} dakika sonra tekrar deneyin.`,
+          retryAfter
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": retryAfter.toString(),
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": rateLimitResult.resetTime.toString(),
+          }
+        }
+      );
+    }
+
     const body = await request.json();
     const { username, password } = body;
 
@@ -63,6 +86,9 @@ export async function POST(request: NextRequest) {
       username: user.username,
       role: user.role,
     });
+
+    // Issue #12 fix: Başarılı login sonrası rate limit sıfırla
+    resetRateLimit(clientIP);
 
     return NextResponse.json({
       success: true,
