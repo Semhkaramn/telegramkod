@@ -34,16 +34,54 @@ export interface RateLimitResult {
 }
 
 /**
- * IP bazlı rate limiting kontrolü
+ * IP bazlı rate limiting kontrolü - SADECE KONTROL, SAYAÇ ARTIRMAZ
  * @param identifier - Genellikle IP adresi veya user ID
  * @param maxRequests - Maksimum istek sayısı (varsayılan: 5)
- * @param windowMs - Zaman penceresi (varsayılan: 60 saniye)
  */
 export function checkRateLimit(
   identifier: string,
+  maxRequests: number = MAX_REQUESTS
+): RateLimitResult {
+  const now = Date.now();
+  const key = `login:${identifier}`;
+
+  const entry = rateLimitStore.get(key);
+
+  // Kayıt yok veya süre dolmuş - izin ver
+  if (!entry || entry.resetTime < now) {
+    return {
+      success: true,
+      remaining: maxRequests,
+      resetTime: now + RATE_LIMIT_WINDOW,
+    };
+  }
+
+  // Limit aşıldı mı kontrol et
+  if (entry.count >= maxRequests) {
+    return {
+      success: false,
+      remaining: 0,
+      resetTime: entry.resetTime,
+      blocked: true,
+    };
+  }
+
+  return {
+    success: true,
+    remaining: maxRequests - entry.count,
+    resetTime: entry.resetTime,
+  };
+}
+
+/**
+ * Başarısız login sonrası rate limit sayacını artır
+ * SADECE BAŞARISIZ DENEMELER İÇİN ÇAĞRILMALI
+ */
+export function incrementRateLimit(
+  identifier: string,
   maxRequests: number = MAX_REQUESTS,
   windowMs: number = RATE_LIMIT_WINDOW
-): RateLimitResult {
+): void {
   const now = Date.now();
   const key = `login:${identifier}`;
 
@@ -56,37 +94,18 @@ export function checkRateLimit(
       resetTime: now + windowMs,
     };
     rateLimitStore.set(key, entry);
-    return {
-      success: true,
-      remaining: maxRequests - 1,
-      resetTime: entry.resetTime,
-    };
-  }
-
-  // Limit aşıldı mı kontrol et
-  if (entry.count >= maxRequests) {
-    // Bloke süresi ekle
-    if (entry.resetTime < now + BLOCK_DURATION) {
-      entry.resetTime = now + BLOCK_DURATION;
-      rateLimitStore.set(key, entry);
-    }
-    return {
-      success: false,
-      remaining: 0,
-      resetTime: entry.resetTime,
-      blocked: true,
-    };
+    return;
   }
 
   // Sayacı artır
   entry.count++;
-  rateLimitStore.set(key, entry);
 
-  return {
-    success: true,
-    remaining: maxRequests - entry.count,
-    resetTime: entry.resetTime,
-  };
+  // Limit aşıldıysa blok süresini ekle
+  if (entry.count >= maxRequests) {
+    entry.resetTime = now + BLOCK_DURATION;
+  }
+
+  rateLimitStore.set(key, entry);
 }
 
 /**
