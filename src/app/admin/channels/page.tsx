@@ -33,12 +33,7 @@ interface Channel {
     displayName: string | null;
     paused: boolean;
   }[];
-  stats?: {
-    daily: number;
-    weekly: number;
-    monthly: number;
-    total?: number;
-  };
+
 }
 
 interface User {
@@ -430,22 +425,6 @@ export default function ChannelsPage() {
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="flex gap-4 text-sm">
-                      <div className="text-slate-400">
-                        <span className="text-slate-100 font-medium">{channel.stats?.daily || 0}</span> bugün
-                      </div>
-                      <div className="text-slate-400">
-                        <span className="text-slate-100 font-medium">{channel.stats?.weekly || 0}</span> hafta
-                      </div>
-                      <div className="text-slate-400">
-                        <span className="text-slate-100 font-medium">{channel.stats?.monthly || 0}</span> ay
-                      </div>
-                      <div className="text-slate-400">
-                        <span className="text-slate-100 font-medium">{channel.stats?.total || 0}</span> toplam
-                      </div>
-                    </div>
-                  </div>
                   <div className="flex items-center gap-2">
                     <div className="flex -space-x-2">
                       {channel.users.slice(0, 3).map((user) => (
