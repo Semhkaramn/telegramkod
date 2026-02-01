@@ -396,28 +396,44 @@ export async function getAllAdmins() {
   }));
 }
 
-export async function addAdmin(
+/**
+ * Kullanıcıyı kanala ata
+ * NOT: Bu fonksiyon eskiden addAdmin olarak adlandırılıyordu ama
+ * aslında UserChannel tablosunda kayıt oluşturuyor
+ */
+export async function assignUserToChannel(
+  userId: number,
   channelId: number,
-  adminId: number,
-  adminUsername: string | null,
-  adminType: string = "ana"
+  paused: boolean = true
 ) {
-  // Bu fonksiyon aslında kullanıcıya kanal atama işlemi yapıyor
-  // Mevcut sistemde UserChannel tablosu kullanılıyor
   return prisma.userChannel.upsert({
     where: {
       userId_channelId: {
-        userId: adminId,
+        userId,
         channelId: BigInt(channelId),
       },
     },
     update: {},
     create: {
-      userId: adminId,
+      userId,
       channelId: BigInt(channelId),
-      paused: true,
+      paused,
     },
   });
+}
+
+/**
+ * @deprecated assignUserToChannel kullanın
+ * Geriye dönük uyumluluk için korunuyor
+ */
+export async function addAdmin(
+  channelId: number,
+  adminId: number,
+  _adminUsername?: string | null,
+  _adminType?: string
+) {
+  // Kullanılmayan parametreler (_adminUsername, _adminType) geriye dönük uyumluluk için korunuyor
+  return assignUserToChannel(adminId, channelId, true);
 }
 
 export async function removeAdmin(channelId: number, adminId: number) {
