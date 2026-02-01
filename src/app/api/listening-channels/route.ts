@@ -80,7 +80,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Sadece channel_name güncellenebilir
-    const updateData: Record<string, unknown> = {};
+    const updateData: { channelName?: string } = {};
     if (channel_name !== undefined) updateData.channelName = channel_name;
 
     await updateListeningChannel(Number(channel_id), updateData);
