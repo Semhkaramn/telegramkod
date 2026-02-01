@@ -18,6 +18,13 @@ DATABASE_URL = os.getenv('DATABASE_URL')
 SESSION_STRING = os.getenv('SESSION_STRING', '')
 BOT_TOKEN = os.getenv('BOT_TOKEN', '')
 
+# Issue #5 Fix: asyncio event loop'u bloke etmemek için
+# senkron DB çağrılarını thread pool'da çalıştır
+async def run_sync(func, *args, **kwargs):
+    """Senkron fonksiyonu asyncio thread pool'da çalıştır"""
+    import functools
+    return await asyncio.to_thread(functools.partial(func, *args, **kwargs))
+
 # Kontroller
 if not api_id or not api_hash:
     print("❌ HATA: API_ID ve API_HASH ayarlanmalı!")
@@ -153,12 +160,13 @@ def get_all_banned_words():
         if conn:
             release_db_connection(conn)
 
-def has_banned_word(code: str) -> bool:
-    """Kod yasak kelime içeriyor mu? (cache'li)"""
+def has_banned_word(code: str, link: str = "") -> bool:
+    """Kod veya link yasak kelime içeriyor mu? (cache'li)"""
     banned = get_banned_words_cached()
-    code_lower = code.lower()
+    # Hem kod hem de link kontrol edilir
+    combined = (code + " " + link).lower()
     for word in banned:
-        if word in code_lower:
+        if word in combined:
             return True
     return False
 
@@ -422,13 +430,15 @@ def normalize_channel_id(channel_id: int) -> int:
 async def send_to_single_channel(channel_id: int, code: str, original_link: str) -> dict:
     """Tek kanala kod gönder (paralel gönderim için)"""
     try:
-        final_link = get_link_for_channel_cached(channel_id, code, original_link)
+        # Issue #5 fix: Cache fonksiyonlarını thread pool'da çalıştır
+        final_link = await run_sync(get_link_for_channel_cached, channel_id, code, original_link)
         message = f"`{code}`\n\n{final_link}"
 
         result = await send_message_via_bot(channel_id, message)
 
         if result.get("ok"):
-            record_code_stat(channel_id, code)
+            # Issue #5 fix: DB yazma işlemini thread pool'da çalıştır
+            await run_sync(record_code_stat, channel_id, code)
             return {"channel_id": channel_id, "success": True}
         else:
             return {"channel_id": channel_id, "success": False, "error": result.get('error')}
@@ -439,11 +449,12 @@ async def send_to_single_channel(channel_id: int, code: str, original_link: str)
 async def send_to_all_channels(code: str, original_link: str):
     """Kodu tüm aktif kanallara PARALEL olarak gönder"""
     try:
-        active_channels = get_active_channels_cached()
+        # Issue #5 fix: Cache fonksiyonunu thread pool'da çalıştır
+        active_channels = await run_sync(get_active_channels_cached)
 
         if not active_channels:
             print(f"⚠️ Aktif kanal yok! Kod gönderilemedi: {code}")
-            log_bot_message("warning", f"Aktif kanal yok, kod gönderilemedi: {code}")
+            await run_sync(log_bot_message, "warning", f"Aktif kanal yok, kod gönderilemedi: {code}")
             return
 
         print(f"🚀 {len(active_channels)} kanala gönderim başlıyor: {code}")
@@ -470,14 +481,19 @@ async def send_to_all_channels(code: str, original_link: str):
 
         if sent_count > 0:
             print(f"✅ Kod gönderildi: {code} | {sent_count}/{len(active_channels)} kanal")
-            log_bot_message("info", f"Kod gönderildi: {code}", f"{sent_count} başarılı, {error_count} hata")
-            cleanup_old_codes()
+            await run_sync(log_bot_message, "info", f"Kod gönderildi: {code}", f"{sent_count} başarılı, {error_count} hata")
+            # Cleanup sadece belirli aralıklarla yapılır (Issue #6 fix)
+            global last_cleanup_time
+            now = time.time()
+            if now - last_cleanup_time > CLEANUP_INTERVAL:
+                await run_sync(cleanup_old_codes)
+                last_cleanup_time = now
         else:
             print(f"❌ Kod hiçbir kanala gönderilemedi: {code}")
 
     except Exception as e:
         print(f"❌ Toplu gönderim hatası: {e}")
-        log_bot_message("error", "Toplu gönderim hatası", str(e)[:500])
+        await run_sync(log_bot_message, "error", "Toplu gönderim hatası", str(e)[:500])
 
 # —————— MESAJ İŞLEME ——————
 async def process_message(event):
@@ -495,8 +511,8 @@ async def process_message(event):
         if len(lines) < 2:
             return
 
-        # Anahtar kelimeler (cache'li)
-        keywords = get_keywords_cached()
+        # Anahtar kelimeler (cache'li) - Issue #5 fix: thread pool'da çalıştır
+        keywords = await run_sync(get_keywords_cached)
 
         # Link regex - daha kapsamlı URL pattern
         # Desteklenen formatlar:
@@ -521,13 +537,15 @@ async def process_message(event):
                 link_match = re.match(link_pattern, link, re.IGNORECASE)
 
                 if code_match and link_match:
-                    if has_banned_word(code):
-                        print(f"🚫 Yasak kelime: {code}")
+                    # Issue #5 fix: thread pool'da çalıştır
+                    if await run_sync(has_banned_word, code, link):
+                        print(f"🚫 Yasak kelime tespit edildi: {code} | {link}")
                         return
 
                     print(f"📡 FORMAT 1 | Kelime: {first_line} | Kod: {code}")
 
-                    if mark_code_as_sent(code):
+                    # Issue #5 fix: thread pool'da çalıştır
+                    if await run_sync(mark_code_as_sent, code):
                         await send_to_all_channels(code, link)
                     else:
                         print(f"🔄 Tekrar: {code}")
@@ -542,20 +560,22 @@ async def process_message(event):
         link_match = re.match(link_pattern, link, re.IGNORECASE)
 
         if code_match and link_match:
-            if has_banned_word(code):
-                print(f"🚫 Yasak kelime: {code}")
+            # Issue #5 fix: thread pool'da çalıştır
+            if await run_sync(has_banned_word, code, link):
+                print(f"🚫 Yasak kelime tespit edildi: {code} | {link}")
                 return
 
             print(f"📡 FORMAT 2 | Kod: {code}")
 
-            if mark_code_as_sent(code):
+            # Issue #5 fix: thread pool'da çalıştır
+            if await run_sync(mark_code_as_sent, code):
                 await send_to_all_channels(code, link)
             else:
                 print(f"🔄 Tekrar: {code}")
 
     except Exception as e:
         print(f"❌ Mesaj işleme hatası: {e}")
-        log_bot_message("error", "Mesaj işleme hatası", str(e)[:500])
+        await run_sync(log_bot_message, "error", "Mesaj işleme hatası", str(e)[:500])
 
 # —————— AKILLI CACHE SİSTEMİ ——————
 # Website değişiklik yapınca DB'deki cache_version artar, bot bunu kontrol eder
@@ -571,7 +591,11 @@ admin_links_cache = []  # [(user_id, channel_id, link_code, link_url), ...] - Ö
 # Cache kontrol değişkenleri
 cache_version_local = 0
 cache_last_check = 0
-CACHE_CHECK_INTERVAL = 10  # Her 10 saniyede version kontrolü
+CACHE_CHECK_INTERVAL = 30  # Her 30 saniyede version kontrolü (Issue #14 fix)
+
+# Cleanup kontrolü (Issue #6 fix)
+last_cleanup_time = 0
+CLEANUP_INTERVAL = 300  # 5 dakikada bir cleanup (her gönderimde değil)
 
 def get_db_cache_version():
     """DB'deki cache version'ı al"""
@@ -729,8 +753,8 @@ async def message_handler(event):
         current_channel_id = event.chat.id
         normalized_id = normalize_channel_id(current_channel_id)
 
-        # Dinleme kanallarını kontrol et
-        listening_channels = get_listening_channels_cached()
+        # Dinleme kanallarını kontrol et - Issue #5 fix: thread pool'da çalıştır
+        listening_channels = await run_sync(get_listening_channels_cached)
 
         # Sadece dinleme kanallarındaki mesajları işle
         for lc_id in listening_channels:
@@ -747,13 +771,14 @@ async def keep_alive():
     while True:
         try:
             await client.get_me()
-            cleanup_old_codes()
-            update_bot_status(True)
+            # Issue #5 fix: DB işlemlerini thread pool'da çalıştır
+            await run_sync(cleanup_old_codes)
+            await run_sync(update_bot_status, True)
             # Cache version kontrolü yap
-            check_and_refresh_cache()
+            await run_sync(check_and_refresh_cache)
         except Exception as e:
             print(f"⚠️ Keep alive hatası: {e}")
-            update_bot_status(True, str(e)[:200])
+            await run_sync(update_bot_status, True, str(e)[:200])
         await asyncio.sleep(60)  # Her 60 saniyede kontrol
 
 # —————— BAŞLANGIÇ ——————
