@@ -63,14 +63,7 @@ export async function GET(request: NextRequest) {
     const userChannels = await prisma.userChannel.findMany({
       where: { userId: targetUserId },
       include: {
-        channel: {
-          include: {
-            stats: {
-              orderBy: { statDate: "desc" },
-              take: 30,
-            },
-          },
-        },
+        channel: true,
       },
     }) as UserChannelWithChannel[];
 
@@ -87,12 +80,6 @@ export async function GET(request: NextRequest) {
         channelPhoto: uc.channel.channelPhoto ?? null,
         memberCount: uc.channel.memberCount ?? null,
         isJoined: uc.channel.isJoined,
-        stats: uc.channel.stats.map((s) => ({
-          id: s.id,
-          channelId: s.channelId.toString(),
-          statDate: s.statDate.toISOString(),
-          dailyCount: s.dailyCount,
-        })),
       },
     }));
 
