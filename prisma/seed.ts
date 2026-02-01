@@ -27,28 +27,6 @@ async function main() {
 
   console.log("✅ Süper admin oluşturuldu:", superAdmin.username);
 
-  // Örnek anahtar kelimeler
-  const keywords = ["bonus", "freespin", "promosyon", "kod"];
-  for (const keyword of keywords) {
-    await prisma.keyword.upsert({
-      where: { keyword },
-      update: {},
-      create: { keyword },
-    });
-  }
-  console.log("✅ Anahtar kelimeler eklendi:", keywords.join(", "));
-
-  // Örnek yasak kelimeler
-  const bannedWords = ["test", "deneme"];
-  for (const word of bannedWords) {
-    await prisma.bannedWord.upsert({
-      where: { word },
-      update: {},
-      create: { word },
-    });
-  }
-  console.log("✅ Yasak kelimeler eklendi:", bannedWords.join(", "));
-
   console.log("\n📋 Kurulum tamamlandı!");
   console.log(`   Giriş: ${adminUsername}`);
   console.log(`   Şifre: ${adminPassword}`);
