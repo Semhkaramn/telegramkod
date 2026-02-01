@@ -483,11 +483,12 @@ async def send_to_all_channels(code: str, original_link: str):
             print(f"✅ Kod gönderildi: {code} | {sent_count}/{len(active_channels)} kanal")
             await run_sync(log_bot_message, "info", f"Kod gönderildi: {code}", f"{sent_count} başarılı, {error_count} hata")
             # Cleanup sadece belirli aralıklarla yapılır (Issue #6 fix)
+            # Race condition fix: timestamp'i önce güncelle, sonra cleanup yap
             global last_cleanup_time
             now = time.time()
             if now - last_cleanup_time > CLEANUP_INTERVAL:
+                last_cleanup_time = now  # Önce güncelle - race condition önleme
                 await run_sync(cleanup_old_codes)
-                last_cleanup_time = now
         else:
             print(f"❌ Kod hiçbir kanala gönderilemedi: {code}")
 
