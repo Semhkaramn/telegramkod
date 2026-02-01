@@ -11,9 +11,7 @@ import {
   User,
   Radio,
   Link2,
-  BarChart3,
   Eye,
-  Settings,
 } from "lucide-react";
 
 interface UserProfile {
@@ -27,10 +25,9 @@ interface UserProfile {
 interface Channel {
   channelId: string;
   channelName: string | null;
-  stats: Array<{
-    statDate: string;
-    dailyCount: number;
-  }>;
+  channelPhoto: string | null;
+  memberCount: number | null;
+  isJoined: boolean;
 }
 
 interface UserChannel {
@@ -104,31 +101,6 @@ export default function ViewUserPage() {
     }
   };
 
-  const calculateStats = () => {
-    const today = new Date().toISOString().split("T")[0];
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .split("T")[0];
-    const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .split("T")[0];
-
-    let todayTotal = 0;
-    let weekTotal = 0;
-    let monthTotal = 0;
-
-    channels.forEach((uc) => {
-      uc.channel.stats.forEach((stat) => {
-        const statDate = stat.statDate.split("T")[0];
-        if (statDate === today) todayTotal += stat.dailyCount;
-        if (statDate >= weekAgo) weekTotal += stat.dailyCount;
-        if (statDate >= monthAgo) monthTotal += stat.dailyCount;
-      });
-    });
-
-    return { todayTotal, weekTotal, monthTotal };
-  };
-
   if (loading) {
     return (
       <div className="space-y-6">
@@ -159,8 +131,8 @@ export default function ViewUserPage() {
     );
   }
 
-  const { todayTotal, weekTotal, monthTotal } = calculateStats();
   const activeChannels = channels.filter((c) => !c.paused).length;
+  const pausedChannels = channels.filter((c) => c.paused).length;
 
   return (
     <div className="space-y-6">
@@ -234,29 +206,29 @@ export default function ViewUserPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="border-zinc-800 bg-zinc-900">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-zinc-400">Bugun</CardTitle>
+            <CardTitle className="text-sm text-zinc-400">Toplam Kanal</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-white">{todayTotal}</p>
-            <p className="text-xs text-zinc-500">kod gonderildi</p>
+            <p className="text-3xl font-bold text-white">{channels.length}</p>
+            <p className="text-xs text-zinc-500">kanal atandi</p>
           </CardContent>
         </Card>
         <Card className="border-zinc-800 bg-zinc-900">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-zinc-400">Bu Hafta</CardTitle>
+            <CardTitle className="text-sm text-zinc-400">Aktif Kanal</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-white">{weekTotal}</p>
-            <p className="text-xs text-zinc-500">kod gonderildi</p>
+            <p className="text-3xl font-bold text-emerald-400">{activeChannels}</p>
+            <p className="text-xs text-zinc-500">kanal aktif</p>
           </CardContent>
         </Card>
         <Card className="border-zinc-800 bg-zinc-900">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-zinc-400">Bu Ay</CardTitle>
+            <CardTitle className="text-sm text-zinc-400">Durdurulmus</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-white">{monthTotal}</p>
-            <p className="text-xs text-zinc-500">kod gonderildi</p>
+            <p className="text-3xl font-bold text-red-400">{pausedChannels}</p>
+            <p className="text-xs text-zinc-500">kanal durduruldu</p>
           </CardContent>
         </Card>
       </div>
