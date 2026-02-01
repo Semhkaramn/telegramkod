@@ -1,26 +1,73 @@
 """
-Telegram Kod Botu - Sadeleştirilmiş Versiyon
+Telegram Kod Botu - Sadeleştirilmiş Versiyon (Detaylı Loglama)
 =============================================
 - Dinleme kanalları, anahtar kelimeler, yasak kelimeler → Hardcoded
 - Hedef kanallar ve admin links → DB'den
 - Gönderilen kodlar → Sadece memory cache
-- İstatistik/Log → YOK
+- İstatistik/Log → Detaylı Heroku Logging
 """
 
 import asyncio
 import re
 import time
 import os
+import sys
+import logging
+from datetime import datetime
 import httpx
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LOGGING AYARLARI - Heroku için optimize edilmiş
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Formatter - Heroku'da timestamp zaten ekleniyor ama yine de ekleyelim
+class HerokuFormatter(logging.Formatter):
+    """Heroku için özel formatter"""
+
+    COLORS = {
+        'DEBUG': '🔍',
+        'INFO': '📋',
+        'WARNING': '⚠️',
+        'ERROR': '❌',
+        'CRITICAL': '🚨'
+    }
+
+    def format(self, record):
+        emoji = self.COLORS.get(record.levelname, '📋')
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        return f"[{timestamp}] {emoji} {record.levelname} | {record.getMessage()}"
+
+# Logger oluştur
+logger = logging.getLogger('TelegramBot')
+logger.setLevel(logging.DEBUG)
+
+# Handler - stdout için (Heroku bunu yakalar)
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
+handler.setFormatter(HerokuFormatter())
+logger.addHandler(handler)
+
+# İstatistikler
+stats = {
+    'messages_received': 0,
+    'format_passed': 0,
+    'format_failed': 0,
+    'keyword_matched': 0,
+    'banned_word_blocked': 0,
+    'duplicate_blocked': 0,
+    'codes_sent': 0,
+    'send_failures': 0,
+    'last_code': None,
+    'last_code_time': None
+}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # HARDCODED CONFIG - BURAYA KENDİ DEĞERLERİNİZİ YAZIN
 # ══════════════════════════════════════════════════════════════════════════════
 
 # Dinleme kanalları - Kodların alınacağı kanallar (ID formatında)
-# Örnek: [-1001234567890, -1009876543210]
 LISTENING_CHANNELS = [
     -1002059757502,
     -1001513128130,
@@ -28,10 +75,16 @@ LISTENING_CHANNELS = [
     -1001904588149
 ]
 
+# Kanal isimlerini tutmak için (log'larda göstermek için)
+CHANNEL_NAMES = {
+    -1002059757502: "Kanal1",
+    -1001513128130: "Kanal2",
+    -1002980401785: "Kanal3",
+    -1001904588149: "Kanal4"
+}
+
 # Anahtar kelimeler - Mesajın ilk satırında aranacak kelimeler
-# Örnek: {"bonus", "kod", "promosyon", "code"}
 KEYWORDS = {
-    # BURAYA ANAHTAR KELİMELERİ YAZIN
     "bahi̇s1000",
     "eli̇t",
     "grand",
@@ -43,13 +96,10 @@ KEYWORDS = {
     "pusulabet",
     "turbo",
     "megabahis"
-    # "promosyon",
 }
 
 # Yasak kelimeler - Bu kelimeleri içeren kodlar gönderilmez
-# Örnek: {"spam", "fake", "test"}
 BANNED_WORDS = {
-    # BURAYA YASAK KELİMELERİ YAZIN
     "aktif",
     "başladı",
     "test",
@@ -58,9 +108,6 @@ BANNED_WORDS = {
     "hazirla",
     "için",
     "kimler"
-
-
-    # "fake",
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -75,11 +122,11 @@ BOT_TOKEN = os.getenv('BOT_TOKEN', '')
 
 # Kontroller
 if not API_ID or not API_HASH:
-    print("❌ HATA: API_ID ve API_HASH ayarlanmalı!")
+    logger.error("HATA: API_ID ve API_HASH ayarlanmalı!")
 if not DATABASE_URL:
-    print("❌ HATA: DATABASE_URL ayarlanmalı!")
+    logger.error("HATA: DATABASE_URL ayarlanmalı!")
 if not BOT_TOKEN:
-    print("❌ HATA: BOT_TOKEN ayarlanmalı!")
+    logger.error("HATA: BOT_TOKEN ayarlanmalı!")
 
 # Telegram Bot API
 TELEGRAM_BOT_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
@@ -102,6 +149,8 @@ def is_code_sent(code: str) -> bool:
 def mark_code_sent(code: str):
     """Kodu gönderildi olarak işaretle"""
     sent_codes[code] = time.time()
+    stats['last_code'] = code
+    stats['last_code_time'] = datetime.now().strftime('%H:%M:%S')
 
     # Memory temizliği - 5000'den fazla kod varsa eski olanları sil
     if len(sent_codes) > 5000:
@@ -109,11 +158,15 @@ def mark_code_sent(code: str):
         expired = [k for k, v in sent_codes.items() if now - v > CODE_TTL]
         for k in expired:
             del sent_codes[k]
+        logger.debug(f"Memory temizlendi: {len(expired)} eski kod silindi")
 
 def has_banned_word(text: str) -> bool:
     """Metin yasak kelime içeriyor mu?"""
     text_lower = text.lower()
-    return any(word in text_lower for word in BANNED_WORDS)
+    for word in BANNED_WORDS:
+        if word in text_lower:
+            return word  # Hangi yasak kelime olduğunu döndür
+    return None
 
 # ══════════════════════════════════════════════════════════════════════════════
 # DATABASE - Sadece hedef kanallar ve admin links için
@@ -137,6 +190,7 @@ def load_target_channels():
     global target_channels_cache, channel_user_map, admin_links_cache
 
     try:
+        logger.info("DB'den hedef kanallar yükleniyor...")
         conn = get_db_connection()
         cursor = conn.cursor()
 
@@ -172,11 +226,16 @@ def load_target_channels():
         cursor.close()
         conn.close()
 
-        print(f"✅ Cache güncellendi: {len(target_channels_cache)} hedef kanal, {len(admin_links_cache)} admin link")
+        logger.info(f"Cache güncellendi: {len(target_channels_cache)} hedef kanal, {len(admin_links_cache)} admin link grubu")
+
+        # Hedef kanalları listele
+        if target_channels_cache:
+            logger.debug(f"Hedef kanal ID'leri: {target_channels_cache[:5]}{'...' if len(target_channels_cache) > 5 else ''}")
+
         return True
 
     except Exception as e:
-        print(f"❌ DB hatası: {e}")
+        logger.error(f"DB hatası: {e}")
         return False
 
 def get_link_for_channel(channel_id: int, code: str, original_link: str) -> str:
@@ -187,6 +246,7 @@ def get_link_for_channel(channel_id: int, code: str, original_link: str) -> str:
         code_lower = code.lower()
         for link_code, link_url in links.items():
             if link_code in code_lower:
+                logger.debug(f"Özel link kullanılıyor: {link_code} -> {channel_id}")
                 return link_url
     return original_link
 
@@ -217,7 +277,7 @@ http_client = httpx.AsyncClient(
 # MESAJ GÖNDERME
 # ══════════════════════════════════════════════════════════════════════════════
 
-async def send_message(chat_id: int, text: str) -> bool:
+async def send_message(chat_id: int, text: str) -> dict:
     """Bot API ile mesaj gönder"""
     try:
         url = f"{TELEGRAM_BOT_API}/sendMessage"
@@ -229,18 +289,29 @@ async def send_message(chat_id: int, text: str) -> bool:
         }
         response = await http_client.post(url, json=payload)
         result = response.json()
-        return result.get("ok", False)
-    except Exception as e:
-        print(f"❌ Gönderim hatası ({chat_id}): {e}")
-        return False
 
-async def send_to_all_channels(code: str, link: str):
+        if result.get("ok"):
+            return {"success": True, "chat_id": chat_id}
+        else:
+            error_desc = result.get("description", "Bilinmeyen hata")
+            logger.warning(f"Gönderim başarısız ({chat_id}): {error_desc}")
+            return {"success": False, "chat_id": chat_id, "error": error_desc}
+
+    except Exception as e:
+        logger.error(f"Gönderim hatası ({chat_id}): {e}")
+        return {"success": False, "chat_id": chat_id, "error": str(e)}
+
+async def send_to_all_channels(code: str, link: str, source_channel: int):
     """Kodu tüm hedef kanallara gönder"""
     if not target_channels_cache:
-        print(f"⚠️ Hedef kanal yok! Kod: {code}")
+        logger.warning(f"HEDEF KANAL YOK! Kod gönderilemedi: {code}")
         return
 
-    print(f"📤 Gönderiliyor: {code} -> {len(target_channels_cache)} kanal")
+    logger.info(f"{'='*50}")
+    logger.info(f"📤 GÖNDERME BAŞLADI | Kod: {code}")
+    logger.info(f"   Kaynak: {CHANNEL_NAMES.get(source_channel, source_channel)}")
+    logger.info(f"   Hedef: {len(target_channels_cache)} kanal")
+    logger.info(f"   Link: {link[:50]}...")
 
     tasks = []
     for channel_id in target_channels_cache:
@@ -250,71 +321,170 @@ async def send_to_all_channels(code: str, link: str):
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    success = sum(1 for r in results if r is True)
-    print(f"   ✅ {success}/{len(target_channels_cache)} başarılı")
+    # Sonuçları analiz et
+    success_count = 0
+    fail_count = 0
+    errors = []
+
+    for r in results:
+        if isinstance(r, dict):
+            if r.get("success"):
+                success_count += 1
+            else:
+                fail_count += 1
+                errors.append(f"{r.get('chat_id')}: {r.get('error', 'Bilinmeyen')}")
+        else:
+            fail_count += 1
+            errors.append(str(r))
+
+    # İstatistikleri güncelle
+    stats['codes_sent'] += 1
+    stats['send_failures'] += fail_count
+
+    # Sonuç logu
+    logger.info(f"📊 GÖNDERME SONUCU:")
+    logger.info(f"   ✅ Başarılı: {success_count}/{len(target_channels_cache)}")
+
+    if fail_count > 0:
+        logger.warning(f"   ❌ Başarısız: {fail_count}")
+        for err in errors[:3]:  # İlk 3 hatayı göster
+            logger.warning(f"      - {err}")
+        if len(errors) > 3:
+            logger.warning(f"      ... ve {len(errors) - 3} hata daha")
+
+    logger.info(f"{'='*50}")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# MESAJ İŞLEME
+# MESAJ İŞLEME - Detaylı Loglama ile
 # ══════════════════════════════════════════════════════════════════════════════
 
 async def process_message(event):
-    """Gelen mesajı işle"""
+    """Gelen mesajı işle - Her adımda detaylı log"""
+    stats['messages_received'] += 1
+
     try:
+        # Kaynak kanal bilgisi
+        source_channel = event.chat_id
+        channel_name = CHANNEL_NAMES.get(source_channel, f"ID:{source_channel}")
+
         text = event.message.message
         if not text:
+            logger.debug(f"[{channel_name}] Boş mesaj, atlanıyor")
             return
 
         text = text.strip()
         lines = [l.strip() for l in text.splitlines() if l.strip()]
 
+        # Kısa preview oluştur
+        preview = text[:50].replace('\n', ' ') + ('...' if len(text) > 50 else '')
+
+        logger.info(f"{'─'*40}")
+        logger.info(f"📩 MESAJ ALINDI | Kaynak: {channel_name}")
+        logger.info(f"   Satır sayısı: {len(lines)}")
+        logger.info(f"   Önizleme: {preview}")
+
+        # Satır sayısı kontrolü
         if len(lines) < 2:
+            logger.debug(f"   ⏭️ FORMAT HATASI: Yetersiz satır ({len(lines)} < 2)")
+            stats['format_failed'] += 1
             return
 
         # Link pattern
         link_pattern = r'^(?:https?://)?(?:www\.)?[a-zA-Z0-9][-a-zA-Z0-9]*(?:\.[a-zA-Z0-9][-a-zA-Z0-9]*)+(?:/[^\s]*)?$'
+        code_pattern = r'^[\wÇçĞğİıÖöŞşÜü-]+$'
 
         code = None
         link = None
+        matched_format = None
+        matched_keyword = None
 
         # FORMAT 1: anahtar_kelime\nkod\nlink (3 satır)
-        if len(lines) >= 3 and lines[0].lower() in KEYWORDS:
-            potential_code = lines[1]
-            potential_link = lines[2]
+        if len(lines) >= 3:
+            first_line_lower = lines[0].lower()
+            if first_line_lower in KEYWORDS:
+                potential_code = lines[1]
+                potential_link = lines[2]
 
-            if re.match(r'^[\wÇçĞğİıÖöŞşÜü-]+$', potential_code) and re.match(link_pattern, potential_link, re.IGNORECASE):
-                code = potential_code
-                link = potential_link
-                print(f"📡 FORMAT 1 | Kelime: {lines[0]} | Kod: {code}")
+                code_valid = re.match(code_pattern, potential_code)
+                link_valid = re.match(link_pattern, potential_link, re.IGNORECASE)
+
+                if code_valid and link_valid:
+                    code = potential_code
+                    link = potential_link
+                    matched_format = "FORMAT 1 (keyword+kod+link)"
+                    matched_keyword = lines[0]
+                    stats['keyword_matched'] += 1
+                    logger.info(f"   ✅ {matched_format}")
+                    logger.info(f"   🔑 Anahtar Kelime: {matched_keyword}")
+                else:
+                    logger.debug(f"   ⏭️ FORMAT 1 uymadı: kod_valid={bool(code_valid)}, link_valid={bool(link_valid)}")
+            else:
+                logger.debug(f"   ⏭️ FORMAT 1: İlk satır anahtar kelime değil: '{lines[0]}'")
 
         # FORMAT 2: kod\nlink (2 satır)
         if not code:
             potential_code = lines[0]
             potential_link = lines[1]
 
-            if re.match(r'^[\wÇçĞğİıÖöŞşÜü-]+$', potential_code) and re.match(link_pattern, potential_link, re.IGNORECASE):
+            code_valid = re.match(code_pattern, potential_code)
+            link_valid = re.match(link_pattern, potential_link, re.IGNORECASE)
+
+            if code_valid and link_valid:
                 code = potential_code
                 link = potential_link
-                print(f"📡 FORMAT 2 | Kod: {code}")
+                matched_format = "FORMAT 2 (kod+link)"
+                logger.info(f"   ✅ {matched_format}")
+            else:
+                logger.debug(f"   ⏭️ FORMAT 2 uymadı:")
+                if not code_valid:
+                    logger.debug(f"      - Kod formatı geçersiz: '{potential_code[:30]}'")
+                if not link_valid:
+                    logger.debug(f"      - Link formatı geçersiz: '{potential_link[:30]}'")
 
+        # Format uyuşmadı
         if not code or not link:
+            logger.info(f"   ❌ FORMAT UYMADI - Mesaj atlandı")
+            stats['format_failed'] += 1
             return
 
-        # Yasak kelime kontrolü
-        if has_banned_word(code) or has_banned_word(link):
-            print(f"🚫 Yasak kelime: {code}")
+        stats['format_passed'] += 1
+        logger.info(f"   📝 Kod: {code}")
+        logger.info(f"   🔗 Link: {link[:40]}...")
+
+        # Yasak kelime kontrolü - KOD
+        banned_in_code = has_banned_word(code)
+        if banned_in_code:
+            logger.warning(f"   🚫 YASAK KELİME (kodda): '{banned_in_code}' -> Kod: {code}")
+            stats['banned_word_blocked'] += 1
             return
+
+        # Yasak kelime kontrolü - LINK
+        banned_in_link = has_banned_word(link)
+        if banned_in_link:
+            logger.warning(f"   🚫 YASAK KELİME (linkte): '{banned_in_link}' -> Link: {link[:40]}")
+            stats['banned_word_blocked'] += 1
+            return
+
+        logger.debug(f"   ✅ Yasak kelime yok")
 
         # Tekrar kontrolü (memory cache)
         if is_code_sent(code):
-            print(f"🔄 Tekrar: {code}")
+            logger.warning(f"   🔄 TEKRAR KOD - Daha önce gönderildi: {code}")
+            stats['duplicate_blocked'] += 1
             return
+
+        logger.debug(f"   ✅ Tekrar değil, yeni kod")
 
         # Kodu işaretle ve gönder
         mark_code_sent(code)
-        await send_to_all_channels(code, link)
+        logger.info(f"   🚀 GÖNDERİLİYOR...")
+
+        await send_to_all_channels(code, link, source_channel)
 
     except Exception as e:
-        print(f"❌ İşleme hatası: {e}")
+        logger.error(f"İŞLEME HATASI: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
 
 # ══════════════════════════════════════════════════════════════════════════════
 # EVENT HANDLER
@@ -326,18 +496,24 @@ def setup_handler():
         @client.on(events.NewMessage(chats=LISTENING_CHANNELS))
         async def handler(event):
             await process_message(event)
-        print(f"✅ {len(LISTENING_CHANNELS)} dinleme kanalı ayarlandı")
+
+        logger.info(f"Dinleme kanalları ayarlandı: {len(LISTENING_CHANNELS)} kanal")
+        for ch_id in LISTENING_CHANNELS:
+            ch_name = CHANNEL_NAMES.get(ch_id, "Bilinmeyen")
+            logger.info(f"   - {ch_name} ({ch_id})")
     else:
-        print("⚠️ DİNLEME KANALI TANIMLANMAMIŞ! Lütfen LISTENING_CHANNELS listesini doldurun.")
+        logger.error("DİNLEME KANALI TANIMLANMAMIŞ! Lütfen LISTENING_CHANNELS listesini doldurun.")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# KEEP ALIVE
+# KEEP ALIVE & İSTATİSTİKLER
 # ══════════════════════════════════════════════════════════════════════════════
 
 async def keep_alive():
     """Bot'u canlı tut ve cache'i güncelle"""
+    iteration = 0
     while True:
         try:
+            iteration += 1
             await client.get_me()
             maybe_refresh_cache()
 
@@ -347,8 +523,26 @@ async def keep_alive():
             for k in expired:
                 del sent_codes[k]
 
+            # Her 5 dakikada bir istatistik göster
+            if iteration % 5 == 0:
+                logger.info(f"{'═'*50}")
+                logger.info(f"📊 BOT İSTATİSTİKLERİ (Son {iteration} dakika)")
+                logger.info(f"   Alınan mesaj: {stats['messages_received']}")
+                logger.info(f"   Format geçen: {stats['format_passed']}")
+                logger.info(f"   Format kalan: {stats['format_failed']}")
+                logger.info(f"   Keyword eşleşen: {stats['keyword_matched']}")
+                logger.info(f"   Yasak kelime engeli: {stats['banned_word_blocked']}")
+                logger.info(f"   Tekrar engeli: {stats['duplicate_blocked']}")
+                logger.info(f"   Gönderilen kod: {stats['codes_sent']}")
+                logger.info(f"   Gönderim hatası: {stats['send_failures']}")
+                logger.info(f"   Memory'de kod: {len(sent_codes)}")
+                logger.info(f"   Hedef kanal: {len(target_channels_cache)}")
+                if stats['last_code']:
+                    logger.info(f"   Son kod: {stats['last_code']} ({stats['last_code_time']})")
+                logger.info(f"{'═'*50}")
+
         except Exception as e:
-            print(f"⚠️ Keep alive hatası: {e}")
+            logger.error(f"Keep alive hatası: {e}")
 
         await asyncio.sleep(60)  # Her 1 dakikada bir
 
@@ -358,15 +552,16 @@ async def keep_alive():
 
 async def main():
     """Bot'u başlat"""
-    print("=" * 60)
-    print("🤖 Telegram Kod Botu - Sadeleştirilmiş Versiyon")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("🤖 TELEGRAM KOD BOTU BAŞLATILIYOR")
+    logger.info("   Versiyon: 2.0 (Detaylı Loglama)")
+    logger.info("=" * 60)
 
     try:
         await client.start()
 
         me = await client.get_me()
-        print(f"✅ Telethon: {me.first_name} (@{me.username})")
+        logger.info(f"Telethon bağlandı: {me.first_name} (@{me.username})")
 
         # Bot token kontrol
         if BOT_TOKEN:
@@ -374,36 +569,41 @@ async def main():
                 response = await http_client.get(f"{TELEGRAM_BOT_API}/getMe")
                 bot_data = response.json()
                 if bot_data.get("ok"):
-                    print(f"✅ Bot API: @{bot_data['result'].get('username')}")
+                    logger.info(f"Bot API bağlandı: @{bot_data['result'].get('username')}")
             except Exception as e:
-                print(f"❌ Bot API hatası: {e}")
+                logger.error(f"Bot API hatası: {e}")
 
         # Hedef kanalları yükle
-        print("\n📥 Hedef kanallar yükleniyor...")
+        logger.info("")
+        logger.info("📥 Hedef kanallar yükleniyor...")
         load_target_channels()
 
         # Event handler kur
         setup_handler()
 
-        print(f"\n📊 Özet:")
-        print(f"   Dinleme kanalları: {len(LISTENING_CHANNELS)} (hardcoded)")
-        print(f"   Anahtar kelimeler: {KEYWORDS if KEYWORDS else 'YOK'}")
-        print(f"   Yasak kelimeler: {BANNED_WORDS if BANNED_WORDS else 'YOK'}")
-        print(f"   Hedef kanallar: {len(target_channels_cache)} (DB'den)")
+        # Özet bilgi
+        logger.info("")
+        logger.info("📊 BAŞLANGIÇ ÖZETİ:")
+        logger.info(f"   Dinleme kanalları: {len(LISTENING_CHANNELS)} (hardcoded)")
+        logger.info(f"   Anahtar kelimeler: {len(KEYWORDS)} adet")
+        logger.info(f"   Yasak kelimeler: {len(BANNED_WORDS)} adet")
+        logger.info(f"   Hedef kanallar: {len(target_channels_cache)} (DB'den)")
 
         # Keep alive başlat
         asyncio.create_task(keep_alive())
 
-        print("\n" + "=" * 60)
-        print("🚀 Bot çalışıyor!")
-        print("=" * 60 + "\n")
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info("🚀 BOT ÇALIŞIYOR - Mesajlar dinleniyor...")
+        logger.info("=" * 60)
+        logger.info("")
 
         await client.run_until_disconnected()
 
     except Exception as e:
-        print(f"❌ Bot hatası: {e}")
+        logger.error(f"Bot hatası: {e}")
         import traceback
-        traceback.print_exc()
+        logger.error(traceback.format_exc())
     finally:
         await http_client.aclose()
         await client.disconnect()
