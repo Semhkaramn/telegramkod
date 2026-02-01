@@ -12,6 +12,7 @@ from datetime import datetime
 import pytz
 import httpx
 import traceback
+import concurrent.futures
 
 # —————— AYARLAR ——————
 api_id = int(os.getenv('API_ID', '0'))
@@ -22,10 +23,14 @@ BOT_TOKEN = os.getenv('BOT_TOKEN', '')
 
 # Issue #5 Fix: asyncio event loop'u bloke etmemek için
 # senkron DB çağrılarını thread pool'da çalıştır
+# BÜYÜK THREAD POOL - çok mesaj için optimize
+thread_executor = concurrent.futures.ThreadPoolExecutor(max_workers=100)
+
 async def run_sync(func, *args, **kwargs):
-    """Senkron fonksiyonu asyncio thread pool'da çalıştır"""
+    """Senkron fonksiyonu asyncio thread pool'da çalıştır - HIZLI VERSİYON"""
     import functools
-    return await asyncio.to_thread(functools.partial(func, *args, **kwargs))
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(thread_executor, functools.partial(func, *args, **kwargs))
 
 # Kontroller
 if not api_id or not api_hash:
@@ -43,8 +48,34 @@ istanbul_tz = pytz.timezone('Europe/Istanbul')
 # Telegram Bot API
 TELEGRAM_BOT_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
+# —————— IN-MEMORY CODE CACHE ——————
+# DB'ye gitmeden önce memory'de kontrol et - ÇOK HIZLI
+sent_codes_memory = {}  # {code: timestamp}
+MEMORY_CODE_TTL = 3600  # 1 saat
+
+def is_code_in_memory(code: str) -> bool:
+    """Kod memory cache'de var mı? - ANINDA"""
+    now = time.time()
+    if code in sent_codes_memory:
+        if now - sent_codes_memory[code] < MEMORY_CODE_TTL:
+            return True
+        else:
+            del sent_codes_memory[code]
+    return False
+
+def add_code_to_memory(code: str):
+    """Kodu memory cache'e ekle"""
+    sent_codes_memory[code] = time.time()
+
+    # Memory temizliği - 10000'den fazla kod varsa eski olanları sil
+    if len(sent_codes_memory) > 10000:
+        now = time.time()
+        expired = [k for k, v in sent_codes_memory.items() if now - v > MEMORY_CODE_TTL]
+        for k in expired:
+            del sent_codes_memory[k]
+
 # —————— CONNECTION POOL ——————
-# Thread-safe connection pool - minimum 5, maximum 50 connection (yüksek trafik için)
+# Thread-safe connection pool - minimum 10, maximum 100 connection (yüksek trafik için)
 connection_pool = None
 
 def init_connection_pool():
@@ -52,11 +83,12 @@ def init_connection_pool():
     global connection_pool
     try:
         connection_pool = pool.ThreadedConnectionPool(
-            minconn=5,
-            maxconn=50,
-            dsn=DATABASE_URL
+            minconn=10,
+            maxconn=100,
+            dsn=DATABASE_URL,
+            connect_timeout=5  # 5 saniye connection timeout
         )
-        print("✅ Connection pool başlatıldı (max: 50)")
+        print("✅ Connection pool başlatıldı (min: 10, max: 100)")
     except Exception as e:
         print(f"❌ Connection pool hatası: {e}")
         raise
@@ -68,8 +100,10 @@ def get_db_connection():
         init_connection_pool()
     try:
         conn = connection_pool.getconn()
+        conn.set_session(autocommit=False)
         with conn.cursor() as cursor:
             cursor.execute("SET timezone = 'Europe/Istanbul'")
+            cursor.execute("SET statement_timeout = '5000'")  # 5 saniye query timeout
         conn.commit()
         return conn
     except Exception as e:
@@ -223,7 +257,7 @@ def get_custom_link(user_id: int, channel_id: int, code: str, original_link: str
 # NOT: get_link_for_channel artık cache'li versiyon kullanıyor (get_link_for_channel_cached)
 # Eski DB sorgulu fonksiyonlar (get_channel_user_id, get_custom_link) artık kullanılmıyor
 
-# —————— KOD KONTROLÜ (HIZLI VERSİYON - ADVISORY LOCK) ——————
+# —————— KOD KONTROLÜ (ULTRA HIZLI VERSİYON) ——————
 def is_code_recently_sent(code: str) -> bool:
     """Son 1 saat içinde kod gönderilmiş mi?"""
     conn = None
@@ -232,7 +266,8 @@ def is_code_recently_sent(code: str) -> bool:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT 1 FROM sent_codes
-            WHERE code = %s AND sent_at > (NOW() AT TIME ZONE 'Europe/Istanbul') - INTERVAL '1 hour'
+            WHERE code = %s AND sent_at > NOW() - INTERVAL '1 hour'
+            LIMIT 1
         """, (code,))
         result = cursor.fetchone() is not None
         return result
@@ -244,52 +279,30 @@ def is_code_recently_sent(code: str) -> bool:
             release_db_connection(conn)
 
 def mark_code_as_sent(code: str) -> bool:
-    """Kodu gönderildi olarak işaretle - Advisory Lock ile hızlı race condition koruması"""
+    """Kodu gönderildi olarak işaretle - TEK SORGU İLE HIZLI VERSİYON"""
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Advisory lock kullan - SERIALIZABLE'dan çok daha hızlı!
-        # Kod hash'ini lock key olarak kullan
-        lock_key = hash(code) & 0x7FFFFFFF  # Pozitif 32-bit integer
-
-        try:
-            # Advisory lock al (beklemeden - başkası aldıysa hemen dön)
-            cursor.execute("SELECT pg_try_advisory_lock(%s)", (lock_key,))
-            got_lock = cursor.fetchone()[0]
-
-            if not got_lock:
-                # Başka bir process bu kodu işliyor
-                print(f"🔄 Concurrent işlem algılandı: {code}")
-                return False
-
-            # Lock aldık, şimdi kontrol et
-            cursor.execute("""
+        # Tek bir atomic sorgu ile hem kontrol et hem ekle
+        # ON CONFLICT DO NOTHING ile race condition'ı önle
+        cursor.execute("""
+            INSERT INTO sent_codes (code, sent_at)
+            SELECT %s, NOW()
+            WHERE NOT EXISTS (
                 SELECT 1 FROM sent_codes
-                WHERE code = %s
-                AND sent_at > (NOW() AT TIME ZONE 'Europe/Istanbul') - INTERVAL '1 hour'
-            """, (code,))
+                WHERE code = %s AND sent_at > NOW() - INTERVAL '1 hour'
+            )
+            ON CONFLICT (code) DO NOTHING
+            RETURNING code
+        """, (code, code))
 
-            if cursor.fetchone():
-                # Kod zaten gönderilmiş
-                return False
+        result = cursor.fetchone()
+        conn.commit()
 
-            # Kod yeni - ekle
-            cursor.execute("""
-                INSERT INTO sent_codes (code, sent_at)
-                VALUES (%s, NOW() AT TIME ZONE 'Europe/Istanbul')
-                ON CONFLICT (code) DO UPDATE
-                SET sent_at = NOW() AT TIME ZONE 'Europe/Istanbul'
-            """, (code,))
-
-            conn.commit()
-            return True
-
-        finally:
-            # Lock'u bırak
-            cursor.execute("SELECT pg_advisory_unlock(%s)", (lock_key,))
-            conn.commit()
+        # Eğer INSERT başarılıysa (yeni kod), True döndür
+        return result is not None
 
     except Exception as e:
         print(f"❌ mark_code_as_sent HATASI: {e}")
@@ -311,9 +324,12 @@ def cleanup_old_codes():
         cursor = conn.cursor()
         cursor.execute("""
             DELETE FROM sent_codes
-            WHERE sent_at < (NOW() AT TIME ZONE 'Europe/Istanbul') - INTERVAL '1 hour'
+            WHERE sent_at < NOW() - INTERVAL '1 hour'
         """)
+        deleted = cursor.rowcount
         conn.commit()
+        if deleted > 0:
+            print(f"🧹 {deleted} eski kod temizlendi")
     except Exception as e:
         print(f"❌ cleanup_old_codes HATASI: {e}")
     finally:
@@ -352,7 +368,7 @@ def log_bot_message(level: str, message: str, details: str = None):
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO bot_logs (level, message, details, created_at)
-            VALUES (%s, %s, %s, NOW() AT TIME ZONE 'Europe/Istanbul')
+            VALUES (%s, %s, %s, NOW())
         """, (level, message, details))
         conn.commit()
     except Exception as e:
@@ -393,8 +409,8 @@ else:
 # —————— HTTP CLIENT (Optimized) ——————
 # Connection pooling ve keep-alive için limits ayarla
 http_client = httpx.AsyncClient(
-    timeout=httpx.Timeout(5.0, connect=2.0),  # 5 saniye toplam, 2 saniye bağlantı
-    limits=httpx.Limits(max_keepalive_connections=20, max_connections=50)
+    timeout=httpx.Timeout(10.0, connect=3.0),  # 10 saniye toplam, 3 saniye bağlantı
+    limits=httpx.Limits(max_keepalive_connections=50, max_connections=100)
 )
 
 # —————— TELEGRAM BOT API ——————
@@ -517,12 +533,20 @@ async def send_to_all_channels(code: str, original_link: str):
         print(f"❌ Toplu gönderim hatası: {e}")
         asyncio.create_task(run_sync(log_bot_message, "error", "Toplu gönderim hatası", str(e)[:500]))
 
-# —————— MESAJ İŞLEME (OPTİMİZE) ——————
+# —————— MESAJ İŞLEME (ULTRA OPTİMİZE) ——————
 async def process_message(event):
     """
-    Mesajı işle - 2 format desteklenir - HIZLI VERSİYON
+    Mesajı işle - 2 format desteklenir - ULTRA HIZLI VERSİYON
     """
     try:
+        # Mesaj gecikme kontrolü
+        msg_time = event.message.date.timestamp()
+        now_time = time.time()
+        delay = now_time - msg_time
+
+        if delay > 30:
+            print(f"⚠️ MESAJ GECİKMESİ: {delay:.0f}sn (Telegram'dan geç alındı)")
+
         text = event.message.message
         if not text:
             return
@@ -554,7 +578,7 @@ async def process_message(event):
                 if re.match(r'^[\wÇçĞğİıÖöŞşÜü-]+$', potential_code) and re.match(link_pattern, potential_link, re.IGNORECASE):
                     code = potential_code
                     link = potential_link
-                    print(f"📡 FORMAT 1 | Kelime: {first_line} | Kod: {code}")
+                    print(f"📡 FORMAT 1 | Kelime: {first_line} | Kod: {code} | Gecikme: {delay:.1f}sn")
 
         # FORMAT 2: kod\nlink (2 satır)
         if not code:
@@ -564,7 +588,7 @@ async def process_message(event):
             if re.match(r'^[\wÇçĞğİıÖöŞşÜü-]+$', potential_code) and re.match(link_pattern, potential_link, re.IGNORECASE):
                 code = potential_code
                 link = potential_link
-                print(f"📡 FORMAT 2 | Kod: {code}")
+                print(f"📡 FORMAT 2 | Kod: {code} | Gecikme: {delay:.1f}sn")
 
         if not code or not link:
             return
@@ -574,11 +598,18 @@ async def process_message(event):
             print(f"🚫 Yasak kelime tespit edildi: {code} | {link}")
             return
 
-        # Kod kontrolü ve gönderim - thread pool'da
+        # ÖNCELİKLE MEMORY CACHE KONTROL - DB'YE HİÇ GİTME
+        if is_code_in_memory(code):
+            print(f"🔄 Tekrar (memory): {code}")
+            return
+
+        # Memory'de yoksa DB'ye git
         if await run_sync(mark_code_as_sent, code):
+            add_code_to_memory(code)  # Memory'e de ekle
             await send_to_all_channels(code, link)
         else:
-            print(f"🔄 Tekrar: {code}")
+            add_code_to_memory(code)  # Zaten var, memory'e ekle
+            print(f"🔄 Tekrar (DB): {code}")
 
     except Exception as e:
         print(f"❌ Mesaj işleme hatası: {e}")
@@ -611,7 +642,7 @@ entity_cache = {}  # {channel_id: entity}
 # Cache kontrol değişkenleri
 cache_version_local = 0
 cache_last_check = 0
-CACHE_CHECK_INTERVAL = 30  # Her 30 saniyede version kontrolü
+CACHE_CHECK_INTERVAL = 15  # Her 15 saniyede version kontrolü (daha sık)
 
 # Cleanup kontrolü
 last_cleanup_time = 0
@@ -710,7 +741,7 @@ def check_and_refresh_cache():
     global cache_version_local, cache_last_check
     now = time.time()
 
-    # Her 30 saniyede bir kontrol et
+    # Her 15 saniyede bir kontrol et
     if now - cache_last_check < CACHE_CHECK_INTERVAL:
         return False
 
@@ -832,7 +863,7 @@ async def filtered_message_handler(event):
 
 # —————— KEEP ALIVE ——————
 dialog_refresh_counter = 0
-DIALOG_REFRESH_INTERVAL = 10  # Her 10 dakikada bir dialogs yenile (daha sık)
+DIALOG_REFRESH_INTERVAL = 5  # Her 5 dakikada bir dialogs yenile (daha sık)
 
 async def keep_alive():
     """Bot'u canlı tut ve cache'i kontrol et"""
@@ -847,6 +878,13 @@ async def keep_alive():
             if now - last_cleanup_time > CLEANUP_INTERVAL:
                 last_cleanup_time = now
                 await run_sync(cleanup_old_codes)
+
+                # Memory cache temizliği
+                expired = [k for k, v in sent_codes_memory.items() if now - v > MEMORY_CODE_TTL]
+                for k in expired:
+                    del sent_codes_memory[k]
+                if expired:
+                    print(f"🧹 Memory cache: {len(expired)} eski kod temizlendi")
 
             await run_sync(update_bot_status, True)
 
@@ -872,7 +910,7 @@ async def keep_alive():
             print(f"⚠️ Keep alive hatası: {e}")
             await run_sync(update_bot_status, True, str(e)[:200])
 
-        await asyncio.sleep(60)  # Her 60 saniyede kontrol
+        await asyncio.sleep(30)  # Her 30 saniyede kontrol (daha sık)
 
 # —————— KANAL ERİŞİM KONTROLÜ ——————
 async def verify_channel_access():
@@ -925,7 +963,7 @@ async def main():
     """Bot'u başlat"""
     print("=" * 60)
     print("🤖 Telegram Kod Botu Başlatılıyor...")
-    print("   Optimize edilmiş versiyon - Hızlı kanal dinleme")
+    print("   ULTRA OPTİMİZE versiyon - Yüksek trafik için")
     print("=" * 60)
 
     try:
@@ -934,7 +972,7 @@ async def main():
 
         await client.start()
         update_bot_status(True)
-        log_bot_message("info", "Bot başlatıldı (optimized)")
+        log_bot_message("info", "Bot başlatıldı (ultra-optimized)")
 
         me = await client.get_me()
         print(f"✅ Telethon: {me.first_name} (@{me.username}) [ID: {me.id}]")
@@ -963,6 +1001,8 @@ async def main():
         print(f"   Dinleme kanalları: {len(listening_channels_cache)} (erişilebilir: {len(accessible)})")
         print(f"   Hedef kanallar: {len(active_channels_cache)}")
         print(f"   Anahtar kelimeler: {keywords_cache}")
+        print(f"   Thread pool: 100 worker")
+        print(f"   DB pool: 10-100 connection")
 
         # Event handler'ı kur
         print("\n🔧 Event handler kuruluyor...")
@@ -974,7 +1014,7 @@ async def main():
         print("")
         print("=" * 60)
         print("🚀 Bot çalışıyor! Mesajlar bekleniyor...")
-        print("   Sadece dinleme kanalları izleniyor (verimli mod)")
+        print("   ULTRA HIZLI mod - Memory cache aktif")
         print("=" * 60)
         print("")
 
@@ -989,6 +1029,8 @@ async def main():
         update_bot_status(False)
         await http_client.aclose()
         await client.disconnect()
+        # Thread executor'u kapat
+        thread_executor.shutdown(wait=False)
         # Connection pool'u kapat
         if connection_pool:
             connection_pool.closeall()
