@@ -2,8 +2,13 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 
+// Issue #13 fix: Fallback secret kaldırıldı - production'da JWT_SECRET zorunlu
+const jwtSecretValue = process.env.JWT_SECRET;
+if (!jwtSecretValue && process.env.NODE_ENV === "production") {
+  console.error("❌ KRİTİK HATA: JWT_SECRET environment variable tanımlanmamış!");
+}
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "fallback-secret-key-change-in-production"
+  jwtSecretValue || "dev-only-fallback-DO-NOT-USE-IN-PRODUCTION"
 );
 
 export async function middleware(request: NextRequest) {
