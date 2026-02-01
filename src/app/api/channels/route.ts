@@ -2,115 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { invalidateCache } from "@/lib/cache";
-
-const BOT_TOKEN = process.env.BOT_TOKEN || "";
-
-// Telegram'dan kanal bilgisi al
-async function fetchChannelInfoFromTelegram(channelInput: string): Promise<{
-  id: string;
-  title: string;
-  username: string | null;
-  photoUrl: string | null;
-  memberCount: number | null;
-  description: string | null;
-} | null> {
-  if (!BOT_TOKEN) return null;
-
-  try {
-    // @ işaretini kaldır
-    let chatId = channelInput.trim();
-    if (chatId.startsWith("@")) {
-      chatId = chatId.substring(1);
-    }
-
-    // Telegram Bot API ile kanal bilgisi al
-    const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getChat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId.includes("-") ? chatId : `@${chatId}`
-      }),
-    });
-
-    const data = await response.json();
-    if (!data.ok) return null;
-
-    const chat = data.result;
-
-    // Kanal fotoğrafını al
-    let photoUrl = null;
-    if (chat.photo) {
-      try {
-        const fileResponse = await fetch(
-          `https://api.telegram.org/bot${BOT_TOKEN}/getFile`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ file_id: chat.photo.small_file_id }),
-          }
-        );
-        const fileData = await fileResponse.json();
-        if (fileData.ok) {
-          photoUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${fileData.result.file_path}`;
-        }
-      } catch (e) {
-        console.error("Error fetching channel photo:", e);
-      }
-    }
-
-    return {
-      id: chat.id.toString(),
-      title: chat.title || chat.username || `Kanal ${chat.id}`,
-      username: chat.username || null,
-      photoUrl,
-      memberCount: chat.member_count || null,
-      description: chat.description || null,
-    };
-  } catch (error) {
-    console.error("Error fetching channel from Telegram:", error);
-    return null;
-  }
-}
-
-// Tüm kanalları güncelle (arka planda)
-async function refreshAllChannelsInBackground() {
-  if (!BOT_TOKEN) return;
-
-  try {
-    const channels = await prisma.channel.findMany();
-
-    for (const channel of channels) {
-      try {
-        const info = await fetchChannelInfoFromTelegram(channel.channelId.toString());
-        if (info) {
-          await prisma.channel.update({
-            where: { channelId: channel.channelId },
-            data: {
-              channelName: info.title,
-              channelUsername: info.username,
-              channelPhoto: info.photoUrl,
-              memberCount: info.memberCount,
-              description: info.description,
-              lastUpdated: new Date(),
-            },
-          });
-        }
-      } catch (e) {
-        // Tek kanal hatası diğerlerini etkilemesin
-        console.error(`Error updating channel ${channel.channelId}:`, e);
-      }
-    }
-  } catch (error) {
-    console.error("Error refreshing channels:", error);
-  }
-}
+import { fetchChannelInfoFromTelegram, refreshAllChannels } from "@/lib/telegram";
 
 // GET - Tüm kanalları getir
 export async function GET(request: NextRequest) {
   try {
     const session = await getSession();
     if (!session || session.role !== "superadmin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: "Yetkisiz erisim" }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -118,8 +17,10 @@ export async function GET(request: NextRequest) {
 
     // Refresh parametresi varsa arka planda güncelle
     if (refresh) {
-      // Arka planda çalıştır, response'u bekletme
-      refreshAllChannelsInBackground();
+      // Arka planda çalıştır, hataları logla
+      refreshAllChannels().catch((error) => {
+        console.error("Arka plan kanal guncellemesi basarisiz:", error);
+      });
     }
 
     const channels = await prisma.channel.findMany({
@@ -190,7 +91,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     console.error("Error fetching channels:", error);
-    return NextResponse.json({ error: "Failed to fetch channels" }, { status: 500 });
+    return NextResponse.json({ error: "Kanallar alinamadi" }, { status: 500 });
   }
 }
 
@@ -199,7 +100,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getSession();
     if (!session || session.role !== "superadmin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: "Yetkisiz erisim" }, { status: 403 });
     }
 
     const body = await request.json();
@@ -233,7 +134,7 @@ export async function POST(request: NextRequest) {
       const cleanInput = channel_id.toString().trim();
       if (cleanInput.startsWith("@") || !/^-?\d+$/.test(cleanInput)) {
         return NextResponse.json(
-          { error: "Kanal bulunamadı. Bot'un kanala admin olarak eklendiğinden emin olun veya sayısal ID girin." },
+          { error: "Kanal bulunamadi. Bot'un kanala admin olarak eklendiginden emin olun veya sayisal ID girin." },
           { status: 400 }
         );
       }
@@ -284,7 +185,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error adding channel:", error);
-    return NextResponse.json({ error: "Kanal eklenirken hata oluştu" }, { status: 500 });
+    return NextResponse.json({ error: "Kanal eklenirken hata olustu" }, { status: 500 });
   }
 }
 
@@ -293,7 +194,7 @@ export async function DELETE(request: NextRequest) {
   try {
     const session = await getSession();
     if (!session || session.role !== "superadmin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: "Yetkisiz erisim" }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -303,12 +204,12 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "channel_id gerekli" }, { status: 400 });
     }
 
-    // Issue #10 fix: BigInt parse hatası yakalama
+    // BigInt parse hatası yakalama
     let parsedChannelId: bigint;
     try {
       parsedChannelId = BigInt(channelId);
     } catch {
-      return NextResponse.json({ error: "Geçersiz kanal ID formatı" }, { status: 400 });
+      return NextResponse.json({ error: "Gecersiz kanal ID formati" }, { status: 400 });
     }
 
     await prisma.channel.delete({
@@ -321,7 +222,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error removing channel:", error);
-    return NextResponse.json({ error: "Kanal silinirken hata oluştu" }, { status: 500 });
+    return NextResponse.json({ error: "Kanal silinirken hata olustu" }, { status: 500 });
   }
 }
 
@@ -330,7 +231,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const session = await getSession();
     if (!session || session.role !== "superadmin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: "Yetkisiz erisim" }, { status: 403 });
     }
 
     const body = await request.json();
@@ -340,12 +241,12 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "channel_id ve paused gerekli" }, { status: 400 });
     }
 
-    // Issue #10 fix: BigInt parse hatası yakalama
+    // BigInt parse hatası yakalama
     let parsedChannelId: bigint;
     try {
       parsedChannelId = BigInt(channel_id);
     } catch {
-      return NextResponse.json({ error: "Geçersiz kanal ID formatı" }, { status: 400 });
+      return NextResponse.json({ error: "Gecersiz kanal ID formati" }, { status: 400 });
     }
 
     // Tüm kullanıcılar için pause durumunu güncelle
@@ -360,7 +261,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error updating channel:", error);
-    return NextResponse.json({ error: "Kanal güncellenirken hata oluştu" }, { status: 500 });
+    return NextResponse.json({ error: "Kanal guncellenirken hata olustu" }, { status: 500 });
   }
 }
 
@@ -369,7 +270,7 @@ export async function PUT(request: NextRequest) {
   try {
     const session = await getSession();
     if (!session || session.role !== "superadmin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: "Yetkisiz erisim" }, { status: 403 });
     }
 
     const body = await request.json();
@@ -383,17 +284,17 @@ export async function PUT(request: NextRequest) {
 
     if (!info) {
       return NextResponse.json(
-        { error: "Kanal bilgisi alınamadı. Bot'un kanala erişimi olduğundan emin olun." },
+        { error: "Kanal bilgisi alinamadi. Bot'un kanala erisimi oldugundan emin olun." },
         { status: 400 }
       );
     }
 
-    // Issue #10 fix: BigInt parse hatası yakalama
+    // BigInt parse hatası yakalama
     let parsedChannelId: bigint;
     try {
       parsedChannelId = BigInt(channel_id);
     } catch {
-      return NextResponse.json({ error: "Geçersiz kanal ID formatı" }, { status: 400 });
+      return NextResponse.json({ error: "Gecersiz kanal ID formati" }, { status: 400 });
     }
 
     await prisma.channel.update({
@@ -414,6 +315,6 @@ export async function PUT(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error updating channel:", error);
-    return NextResponse.json({ error: "Kanal güncellenirken hata oluştu" }, { status: 500 });
+    return NextResponse.json({ error: "Kanal guncellenirken hata olustu" }, { status: 500 });
   }
 }
