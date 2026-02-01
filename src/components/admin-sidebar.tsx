@@ -38,29 +38,6 @@ const adminLinks = [
     ),
   },
   {
-    href: "/admin/stats",
-    label: "Istatistikler",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 3v18h18" />
-        <path d="m19 9-5 5-4-4-3 3" />
-      </svg>
-    ),
-  },
-  {
-    href: "/admin/logs",
-    label: "Bot Loglari",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-        <polyline points="14 2 14 8 20 8" />
-        <line x1="16" x2="8" y1="13" y2="13" />
-        <line x1="16" x2="8" y1="17" y2="17" />
-        <line x1="10" x2="8" y1="9" y2="9" />
-      </svg>
-    ),
-  },
-  {
     href: "/admin/users",
     label: "Kullanicilar",
     icon: (
@@ -79,26 +56,6 @@ const adminLinks = [
       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="m22 2-7 20-4-9-9-4Z" />
         <path d="M22 2 11 13" />
-      </svg>
-    ),
-  },
-  {
-    href: "/admin/listening",
-    label: "Dinleme Kanallari",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
-        <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
-      </svg>
-    ),
-  },
-  {
-    href: "/admin/keywords",
-    label: "Kelimeler",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z" />
-        <path d="M7 7h.01" />
       </svg>
     ),
   },
