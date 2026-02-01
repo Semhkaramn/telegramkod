@@ -1,429 +1,224 @@
+"""
+Telegram Kod Botu - Sadeleştirilmiş Versiyon
+=============================================
+- Dinleme kanalları, anahtar kelimeler, yasak kelimeler → Hardcoded
+- Hedef kanallar ve admin links → DB'den
+- Gönderilen kodlar → Sadece memory cache
+- İstatistik/Log → YOK
+"""
+
 import asyncio
 import re
 import time
-import psycopg2
-from psycopg2 import pool
 import os
+import httpx
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
-from telethon.tl.functions.channels import GetFullChannelRequest
-from telethon.tl.types import Channel, Chat
-from datetime import datetime
-import pytz
-import httpx
-import traceback
-import concurrent.futures
 
-# —————— AYARLAR ——————
-api_id = int(os.getenv('API_ID', '0'))
-api_hash = os.getenv('API_HASH', '')
-DATABASE_URL = os.getenv('DATABASE_URL')
+# ══════════════════════════════════════════════════════════════════════════════
+# HARDCODED CONFIG - BURAYA KENDİ DEĞERLERİNİZİ YAZIN
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Dinleme kanalları - Kodların alınacağı kanallar (ID formatında)
+# Örnek: [-1001234567890, -1009876543210]
+LISTENING_CHANNELS = [
+    -1002059757502,
+    -1001513128130,
+    -1002980401785,
+    -1001904588149
+]
+
+# Anahtar kelimeler - Mesajın ilk satırında aranacak kelimeler
+# Örnek: {"bonus", "kod", "promosyon", "code"}
+KEYWORDS = {
+    # BURAYA ANAHTAR KELİMELERİ YAZIN
+    "bahi̇s1000",
+    "eli̇t",
+    "grand",
+    "hizli",
+    "jojobet",
+    "kavbet",
+    "mavi̇bet",
+    "pusula",
+    "pusulabet",
+    "turbo",
+    "megabahis"
+    # "promosyon",
+}
+
+# Yasak kelimeler - Bu kelimeleri içeren kodlar gönderilmez
+# Örnek: {"spam", "fake", "test"}
+BANNED_WORDS = {
+    # BURAYA YASAK KELİMELERİ YAZIN
+    "aktif",
+    "başladı",
+    "test",
+    "etkinliği",
+    "geliyor",
+    "hazirla",
+    "için",
+    "kimler"
+
+
+    # "fake",
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ENV AYARLARI
+# ══════════════════════════════════════════════════════════════════════════════
+
+API_ID = int(os.getenv('API_ID', '0'))
+API_HASH = os.getenv('API_HASH', '')
+DATABASE_URL = os.getenv('DATABASE_URL', '')
 SESSION_STRING = os.getenv('SESSION_STRING', '')
 BOT_TOKEN = os.getenv('BOT_TOKEN', '')
 
-# Issue #5 Fix: asyncio event loop'u bloke etmemek için
-# senkron DB çağrılarını thread pool'da çalıştır
-# BÜYÜK THREAD POOL - çok mesaj için optimize
-thread_executor = concurrent.futures.ThreadPoolExecutor(max_workers=100)
-
-async def run_sync(func, *args, **kwargs):
-    """Senkron fonksiyonu asyncio thread pool'da çalıştır - HIZLI VERSİYON"""
-    import functools
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(thread_executor, functools.partial(func, *args, **kwargs))
-
-def run_sync_fire_and_forget(func, *args, **kwargs):
-    """Senkron fonksiyonu arka planda çalıştır - BEKLEME YOK"""
-    import functools
-    thread_executor.submit(functools.partial(func, *args, **kwargs))
-
 # Kontroller
-if not api_id or not api_hash:
+if not API_ID or not API_HASH:
     print("❌ HATA: API_ID ve API_HASH ayarlanmalı!")
 if not DATABASE_URL:
     print("❌ HATA: DATABASE_URL ayarlanmalı!")
-if not SESSION_STRING:
-    print("⚠️ UYARI: SESSION_STRING ayarlanmamış!")
 if not BOT_TOKEN:
-    print("❌ HATA: BOT_TOKEN ayarlanmamış!")
-
-# Timezone
-istanbul_tz = pytz.timezone('Europe/Istanbul')
+    print("❌ HATA: BOT_TOKEN ayarlanmalı!")
 
 # Telegram Bot API
 TELEGRAM_BOT_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-# —————— IN-MEMORY CODE CACHE ——————
-# DB'ye gitmeden önce memory'de kontrol et - ÇOK HIZLI
-sent_codes_memory = {}  # {code: timestamp}
-MEMORY_CODE_TTL = 3600  # 1 saat
+# ══════════════════════════════════════════════════════════════════════════════
+# MEMORY CACHE - Gönderilen kodlar (DB yok, sadece memory)
+# ══════════════════════════════════════════════════════════════════════════════
 
-def is_code_in_memory(code: str) -> bool:
-    """Kod memory cache'de var mı? - ANINDA"""
-    now = time.time()
-    if code in sent_codes_memory:
-        if now - sent_codes_memory[code] < MEMORY_CODE_TTL:
+sent_codes = {}  # {code: timestamp}
+CODE_TTL = 3600  # 1 saat
+
+def is_code_sent(code: str) -> bool:
+    """Kod daha önce gönderildi mi?"""
+    if code in sent_codes:
+        if time.time() - sent_codes[code] < CODE_TTL:
             return True
-        else:
-            del sent_codes_memory[code]
+        del sent_codes[code]
     return False
 
-def add_code_to_memory(code: str):
-    """Kodu memory cache'e ekle"""
-    sent_codes_memory[code] = time.time()
+def mark_code_sent(code: str):
+    """Kodu gönderildi olarak işaretle"""
+    sent_codes[code] = time.time()
 
-    # Memory temizliği - 10000'den fazla kod varsa eski olanları sil
-    if len(sent_codes_memory) > 10000:
+    # Memory temizliği - 5000'den fazla kod varsa eski olanları sil
+    if len(sent_codes) > 5000:
         now = time.time()
-        expired = [k for k, v in sent_codes_memory.items() if now - v > MEMORY_CODE_TTL]
+        expired = [k for k, v in sent_codes.items() if now - v > CODE_TTL]
         for k in expired:
-            del sent_codes_memory[k]
+            del sent_codes[k]
 
-# —————— CONNECTION POOL ——————
-# Thread-safe connection pool - minimum 10, maximum 100 connection (yüksek trafik için)
-connection_pool = None
+def has_banned_word(text: str) -> bool:
+    """Metin yasak kelime içeriyor mu?"""
+    text_lower = text.lower()
+    return any(word in text_lower for word in BANNED_WORDS)
 
-def init_connection_pool():
-    """Connection pool'u başlat"""
-    global connection_pool
-    try:
-        connection_pool = pool.ThreadedConnectionPool(
-            minconn=10,
-            maxconn=100,
-            dsn=DATABASE_URL,
-            connect_timeout=5  # 5 saniye connection timeout
-        )
-        print("✅ Connection pool başlatıldı (min: 10, max: 100)")
-    except Exception as e:
-        print(f"❌ Connection pool hatası: {e}")
-        raise
+# ══════════════════════════════════════════════════════════════════════════════
+# DATABASE - Sadece hedef kanallar ve admin links için
+# ══════════════════════════════════════════════════════════════════════════════
+
+import psycopg2
+
+# Cache - Başlangıçta bir kez yüklenir, 5 dakikada bir güncellenir
+target_channels_cache = []  # [channel_id, ...]
+admin_links_cache = {}  # {(user_id, channel_id): {code: url}}
+channel_user_map = {}  # {channel_id: user_id}
+cache_last_update = 0
+CACHE_TTL = 300  # 5 dakika
 
 def get_db_connection():
-    """Pool'dan connection al"""
-    global connection_pool
-    if connection_pool is None:
-        init_connection_pool()
-    try:
-        conn = connection_pool.getconn()
-        conn.set_session(autocommit=False)
-        with conn.cursor() as cursor:
-            cursor.execute("SET timezone = 'Europe/Istanbul'")
-            cursor.execute("SET statement_timeout = '5000'")  # 5 saniye query timeout
-        conn.commit()
-        return conn
-    except Exception as e:
-        print(f"❌ DB BAĞLANTI HATASI: {e}")
-        raise
+    """DB bağlantısı al"""
+    return psycopg2.connect(DATABASE_URL, connect_timeout=10)
 
-def release_db_connection(conn):
-    """Connection'ı pool'a geri ver"""
-    global connection_pool
-    if connection_pool and conn:
-        try:
-            connection_pool.putconn(conn)
-        except Exception as e:
-            print(f"⚠️ Connection release hatası: {e}")
+def load_target_channels():
+    """Hedef kanalları DB'den yükle"""
+    global target_channels_cache, channel_user_map, admin_links_cache
 
-# —————— DİNLEME KANALLARI ——————
-def get_listening_channels():
-    """Dinleme kanallarını al - sadece channel_id"""
-    conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT channel_id FROM listening_channels")
-        result = [row[0] for row in cursor.fetchall()]
-        return result
-    except Exception as e:
-        print(f"❌ get_listening_channels HATASI: {e}")
-        return []
-    finally:
-        if conn:
-            release_db_connection(conn)
 
-# —————— HEDEF KANALLAR ——————
-def get_active_channels():
-    """Aktif hedef kanalları al"""
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        # Aktif hedef kanalları al
         cursor.execute("""
-            SELECT DISTINCT c.channel_id
-            FROM channels c
-            INNER JOIN user_channels uc ON c.channel_id = uc.channel_id
+            SELECT DISTINCT uc.channel_id, uc.user_id
+            FROM user_channels uc
             INNER JOIN users u ON uc.user_id = u.id
             WHERE uc.paused = false
               AND u.is_banned = false
               AND u.is_active = true
               AND u.bot_enabled = true
         """)
-        result = [row[0] for row in cursor.fetchall()]
-        return result
-    except Exception as e:
-        print(f"❌ get_active_channels HATASI: {e}")
-        return []
-    finally:
-        if conn:
-            release_db_connection(conn)
 
-# —————— ANAHTAR KELİMELER ——————
-def get_all_keywords():
-    """Anahtar kelimeleri al"""
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT keyword FROM keywords ORDER BY keyword")
-        result = [row[0].lower() for row in cursor.fetchall()]
-        return result
-    except Exception as e:
-        print(f"❌ get_all_keywords HATASI: {e}")
-        return []
-    finally:
-        if conn:
-            release_db_connection(conn)
+        results = cursor.fetchall()
+        target_channels_cache = list(set([row[0] for row in results]))
+        channel_user_map = {row[0]: row[1] for row in results}
 
-# —————— YASAK KELİMELER ——————
-def get_all_banned_words():
-    """Yasak kelimeleri al"""
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT word FROM banned_words ORDER BY word")
-        result = [row[0].lower() for row in cursor.fetchall()]
-        return result
-    except Exception as e:
-        print(f"❌ get_all_banned_words HATASI: {e}")
-        return []
-    finally:
-        if conn:
-            release_db_connection(conn)
-
-def has_banned_word(code: str, link: str = "") -> bool:
-    """Kod veya link yasak kelime içeriyor mu? (cache'li)"""
-    banned = get_banned_words_cached()
-    # Hem kod hem de link kontrol edilir
-    combined = (code + " " + link).lower()
-    for word in banned:
-        if word in combined:
-            return True
-    return False
-
-# —————— LİNK ÖZELLEŞTİRME ——————
-def get_channel_user_id(channel_id: int):
-    """Kanalın aktif kullanıcısını al"""
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        # Admin linklerini al
         cursor.execute("""
-            SELECT uc.user_id FROM user_channels uc
-            INNER JOIN users u ON uc.user_id = u.id
-            WHERE uc.channel_id = %s
-              AND uc.paused = false
-              AND u.is_banned = false
-              AND u.is_active = true
-              AND u.bot_enabled = true
-            LIMIT 1
-        """, (channel_id,))
-        result = cursor.fetchone()
-        return result[0] if result else None
-    except Exception as e:
-        print(f"❌ get_channel_user_id HATASI: {e}")
-        return None
-    finally:
-        if conn:
-            release_db_connection(conn)
-
-def get_custom_link(user_id: int, channel_id: int, code: str, original_link: str) -> str:
-    """Kullanıcının özel linkini al"""
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT link_url FROM admin_links
-            WHERE user_id = %s AND channel_id = %s
-            AND (%s ILIKE '%%' || link_code || '%%' OR %s ILIKE '%%' || link_code || '%%')
-            ORDER BY LENGTH(link_code) DESC
-            LIMIT 1
-        """, (user_id, channel_id, code, original_link))
-        result = cursor.fetchone()
-        return result[0] if result else None
-    except Exception as e:
-        print(f"❌ get_custom_link HATASI: {e}")
-        return None
-    finally:
-        if conn:
-            release_db_connection(conn)
-
-# NOT: get_link_for_channel artık cache'li versiyon kullanıyor (get_link_for_channel_cached)
-# Eski DB sorgulu fonksiyonlar (get_channel_user_id, get_custom_link) artık kullanılmıyor
-
-# —————— KOD KONTROLÜ (ULTRA HIZLI VERSİYON) ——————
-def is_code_recently_sent(code: str) -> bool:
-    """Son 1 saat içinde kod gönderilmiş mi?"""
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT 1 FROM sent_codes
-            WHERE code = %s AND sent_at > NOW() - INTERVAL '1 hour'
-            LIMIT 1
-        """, (code,))
-        result = cursor.fetchone() is not None
-        return result
-    except Exception as e:
-        print(f"❌ is_code_recently_sent HATASI: {e}")
-        return False
-    finally:
-        if conn:
-            release_db_connection(conn)
-
-def mark_code_as_sent(code: str) -> bool:
-    """Kodu gönderildi olarak işaretle - TEK SORGU İLE HIZLI VERSİYON"""
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        # Tek bir atomic sorgu ile hem kontrol et hem ekle
-        # ON CONFLICT DO NOTHING ile race condition'ı önle
-        cursor.execute("""
-            INSERT INTO sent_codes (code, sent_at)
-            SELECT %s, NOW()
-            WHERE NOT EXISTS (
-                SELECT 1 FROM sent_codes
-                WHERE code = %s AND sent_at > NOW() - INTERVAL '1 hour'
-            )
-            ON CONFLICT (code) DO NOTHING
-            RETURNING code
-        """, (code, code))
-
-        result = cursor.fetchone()
-        conn.commit()
-
-        # Eğer INSERT başarılıysa (yeni kod), True döndür
-        return result is not None
-
-    except Exception as e:
-        print(f"❌ mark_code_as_sent HATASI: {e}")
-        if conn:
-            try:
-                conn.rollback()
-            except:
-                pass
-        return False
-    finally:
-        if conn:
-            release_db_connection(conn)
-
-def cleanup_old_codes():
-    """Eski kodları temizle"""
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            DELETE FROM sent_codes
-            WHERE sent_at < NOW() - INTERVAL '1 hour'
+            SELECT user_id, channel_id, link_code, link_url
+            FROM admin_links
         """)
-        deleted = cursor.rowcount
-        conn.commit()
-        if deleted > 0:
-            print(f"🧹 {deleted} eski kod temizlendi")
-    except Exception as e:
-        print(f"❌ cleanup_old_codes HATASI: {e}")
-    finally:
-        if conn:
-            release_db_connection(conn)
 
-# —————— İSTATİSTİK ——————
-def record_code_stat(channel_id: int, code: str):
-    """Kod istatistiğini kaydet"""
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        now = datetime.now(istanbul_tz)
-        today = now.date()
-        cursor.execute("""
-            INSERT INTO channel_stats (channel_id, stat_date, daily_count, last_updated)
-            VALUES (%s, %s, 1, %s)
-            ON CONFLICT (channel_id, stat_date) DO UPDATE
-            SET daily_count = channel_stats.daily_count + 1,
-                last_updated = %s
-        """, (channel_id, today, now, now))
-        conn.commit()
-    except Exception as e:
-        print(f"❌ record_code_stat HATASI: {e}")
-    finally:
-        if conn:
-            release_db_connection(conn)
+        admin_links_cache = {}
+        for row in cursor.fetchall():
+            user_id, channel_id, link_code, link_url = row
+            key = (user_id, channel_id)
+            if key not in admin_links_cache:
+                admin_links_cache[key] = {}
+            admin_links_cache[key][link_code.lower()] = link_url
 
-# —————— BOT LOG ——————
-def log_bot_message(level: str, message: str, details: str = None):
-    """Log kaydet"""
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO bot_logs (level, message, details, created_at)
-            VALUES (%s, %s, %s, NOW())
-        """, (level, message, details))
-        conn.commit()
-    except Exception as e:
-        print(f"⚠️ Log hatası: {e}")
-    finally:
-        if conn:
-            release_db_connection(conn)
+        cursor.close()
+        conn.close()
 
-def update_bot_status(is_running: bool, error: str = None):
-    """Bot durumunu güncelle"""
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO bot_status (id, is_running, last_ping, last_error, started_at, updated_at)
-            VALUES (1, %s, NOW(), %s, CASE WHEN %s THEN NOW() ELSE NULL END, NOW())
-            ON CONFLICT (id) DO UPDATE SET
-                is_running = %s,
-                last_ping = NOW(),
-                last_error = %s,
-                started_at = CASE WHEN %s AND bot_status.started_at IS NULL THEN NOW() ELSE bot_status.started_at END,
-                updated_at = NOW()
-        """, (is_running, error, is_running, is_running, error, is_running))
-        conn.commit()
-    except Exception as e:
-        print(f"⚠️ Status hatası: {e}")
-    finally:
-        if conn:
-            release_db_connection(conn)
+        print(f"✅ Cache güncellendi: {len(target_channels_cache)} hedef kanal, {len(admin_links_cache)} admin link")
+        return True
 
-# —————— TELETHON CLIENT ——————
+    except Exception as e:
+        print(f"❌ DB hatası: {e}")
+        return False
+
+def get_link_for_channel(channel_id: int, code: str, original_link: str) -> str:
+    """Kanal için uygun linki al - önce özel link, yoksa orijinal"""
+    user_id = channel_user_map.get(channel_id)
+    if user_id:
+        links = admin_links_cache.get((user_id, channel_id), {})
+        code_lower = code.lower()
+        for link_code, link_url in links.items():
+            if link_code in code_lower:
+                return link_url
+    return original_link
+
+def maybe_refresh_cache():
+    """Gerekirse cache'i güncelle"""
+    global cache_last_update
+    now = time.time()
+    if now - cache_last_update > CACHE_TTL:
+        cache_last_update = now
+        load_target_channels()
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TELEGRAM CLIENT
+# ══════════════════════════════════════════════════════════════════════════════
+
 if SESSION_STRING:
-    client = TelegramClient(StringSession(SESSION_STRING), api_id, api_hash)
+    client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 else:
-    client = TelegramClient('bot_session', api_id, api_hash)
+    client = TelegramClient('bot_session', API_ID, API_HASH)
 
-# —————— HTTP CLIENT (HIZLI - 3 SANİYE TIMEOUT) ——————
+# HTTP Client
 http_client = httpx.AsyncClient(
-    timeout=httpx.Timeout(3.0, connect=2.0),  # 3 saniye toplam, 2 saniye bağlantı - HIZLI
-    limits=httpx.Limits(max_keepalive_connections=50, max_connections=100)
+    timeout=httpx.Timeout(5.0, connect=3.0),
+    limits=httpx.Limits(max_keepalive_connections=20, max_connections=50)
 )
 
-# —————— TELEGRAM BOT API ——————
-async def send_message_via_bot(chat_id: int, text: str) -> dict:
-    """Bot API ile mesaj gönder"""
-    if not BOT_TOKEN:
-        print("❌ BOT_TOKEN ayarlanmamış!")
-        return {"ok": False, "error": "BOT_TOKEN not set"}
+# ══════════════════════════════════════════════════════════════════════════════
+# MESAJ GÖNDERME
+# ══════════════════════════════════════════════════════════════════════════════
 
+async def send_message(chat_id: int, text: str) -> bool:
+    """Bot API ile mesaj gönder"""
     try:
         url = f"{TELEGRAM_BOT_API}/sendMessage"
         payload = {
@@ -432,105 +227,39 @@ async def send_message_via_bot(chat_id: int, text: str) -> dict:
             "parse_mode": "Markdown",
             "disable_web_page_preview": True
         }
-
         response = await http_client.post(url, json=payload)
         result = response.json()
-
-        if not result.get("ok"):
-            error_desc = result.get("description", "Unknown error")
-            error_code = result.get("error_code", "N/A")
-            print(f"❌ Gönderim hatası ({chat_id}): [{error_code}] {error_desc}")
-            return {"ok": False, "error": error_desc, "error_code": error_code}
-
-        return {"ok": True}
+        return result.get("ok", False)
     except Exception as e:
-        print(f"❌ HTTP hatası ({chat_id}): {e}")
-        return {"ok": False, "error": str(e)}
+        print(f"❌ Gönderim hatası ({chat_id}): {e}")
+        return False
 
-# —————— YARDIMCI ——————
-def normalize_channel_id(channel_id: int) -> int:
-    """Kanal ID'sini normalize et - tüm formatları -100XXXXX formatına çevir"""
-    if channel_id > 0:
-        return int(f"-100{channel_id}")
-    elif channel_id < 0 and channel_id > -1000000000:
-        # -XXXXX formatı -> -100XXXXX
-        return int(f"-100{abs(channel_id)}")
-    return channel_id
+async def send_to_all_channels(code: str, link: str):
+    """Kodu tüm hedef kanallara gönder"""
+    if not target_channels_cache:
+        print(f"⚠️ Hedef kanal yok! Kod: {code}")
+        return
 
-def get_all_channel_id_variants(channel_id: int) -> set:
-    """Bir kanal ID'sinin tüm olası varyantlarını döndür"""
-    variants = set()
-    variants.add(channel_id)
+    print(f"📤 Gönderiliyor: {code} -> {len(target_channels_cache)} kanal")
 
-    if channel_id > 0:
-        # Pozitif ID
-        variants.add(-channel_id)
-        variants.add(int(f"-100{channel_id}"))
-    elif str(channel_id).startswith('-100'):
-        # -100XXXXX formatı
-        base_id = int(str(channel_id)[4:])
-        variants.add(base_id)
-        variants.add(-base_id)
-    elif channel_id < 0:
-        # -XXXXX formatı
-        base_id = abs(channel_id)
-        variants.add(base_id)
-        variants.add(int(f"-100{base_id}"))
-
-    return variants
-
-# —————— KOD GÖNDER (ANINDA - BEKLEME YOK) ——————
-async def send_to_single_channel_fire(channel_id: int, code: str, original_link: str):
-    """Tek kanala kod gönder - fire and forget, bekleme yok"""
-    try:
-        final_link = get_link_for_channel_cached(channel_id, code, original_link)
+    tasks = []
+    for channel_id in target_channels_cache:
+        final_link = get_link_for_channel(channel_id, code, link)
         message = f"`{code}`\n\n{final_link}"
+        tasks.append(send_message(channel_id, message))
 
-        result = await send_message_via_bot(channel_id, message)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        if result.get("ok"):
-            # İstatistik arka planda - thread pool'da
-            run_sync_fire_and_forget(record_code_stat, channel_id, code)
-            print(f"   ✅ Gönderildi: {channel_id}")
-        else:
-            print(f"   ❌ Hata {channel_id}: {result.get('error', 'unknown')}")
-    except Exception as e:
-        print(f"   ❌ Exception {channel_id}: {e}")
+    success = sum(1 for r in results if r is True)
+    print(f"   ✅ {success}/{len(target_channels_cache)} başarılı")
 
-def send_to_all_channels_instant(code: str, original_link: str):
-    """Kodu tüm aktif kanallara ANINDA gönder - HİÇ BEKLEME YOK"""
-    try:
-        active_channels = active_channels_cache.copy()
+# ══════════════════════════════════════════════════════════════════════════════
+# MESAJ İŞLEME
+# ══════════════════════════════════════════════════════════════════════════════
 
-        if not active_channels:
-            print(f"⚠️ Aktif kanal yok! Kod gönderilemedi: {code}")
-            return
-
-        print(f"🚀 ANINDA GÖNDERİM: {code} -> {len(active_channels)} kanal")
-
-        # Her kanala ayrı async task oluştur - BEKLEME YOK
-        for channel_id in active_channels:
-            asyncio.create_task(send_to_single_channel_fire(channel_id, code, original_link))
-
-        # Log arka planda
-        run_sync_fire_and_forget(log_bot_message, "info", f"Kod gönderildi: {code}", f"{len(active_channels)} kanala")
-
-    except Exception as e:
-        print(f"❌ Gönderim hatası: {e}")
-
-# —————— MESAJ İŞLEME (ANINDA - SIFIR BEKLEME) ——————
 async def process_message(event):
-    """
-    Mesajı işle - ANINDA GÖNDER, HİÇBİR ŞEY BEKLEME
-    """
+    """Gelen mesajı işle"""
     try:
-        msg_time = event.message.date.timestamp()
-        now_time = time.time()
-        delay = now_time - msg_time
-
-        if delay > 30:
-            print(f"⚠️ MESAJ GECİKMESİ: {delay:.0f}sn (Telegram'dan geç alındı)")
-
         text = event.message.message
         if not text:
             return
@@ -541,420 +270,103 @@ async def process_message(event):
         if len(lines) < 2:
             return
 
-        # Cache'den al - memory'de, anında (DB'ye gitmiyor!)
-        keywords = keywords_cache_set  # Set kullan, O(1) lookup
-
-        # Link regex - daha kapsamlı URL pattern
+        # Link pattern
         link_pattern = r'^(?:https?://)?(?:www\.)?[a-zA-Z0-9][-a-zA-Z0-9]*(?:\.[a-zA-Z0-9][-a-zA-Z0-9]*)+(?:/[^\s]*)?$'
 
         code = None
         link = None
 
-        # FORMAT 1: kelime\nkod\nlink (3 satır)
-        if len(lines) >= 3:
-            first_line = lines[0].lower()
-
-            if first_line in keywords:
-                potential_code = lines[1].strip()
-                potential_link = lines[2].strip()
-
-                # Kod kontrolü (alfanümerik + Türkçe + tire)
-                if re.match(r'^[\wÇçĞğİıÖöŞşÜü-]+$', potential_code) and re.match(link_pattern, potential_link, re.IGNORECASE):
-                    code = potential_code
-                    link = potential_link
-                    print(f"📡 FORMAT 1 | Kelime: {first_line} | Kod: {code} | Gecikme: {delay:.1f}sn")
-
-        # FORMAT 2: kod\nlink (2 satır)
-        if not code:
-            potential_code = lines[0].strip()
-            potential_link = lines[1].strip()
+        # FORMAT 1: anahtar_kelime\nkod\nlink (3 satır)
+        if len(lines) >= 3 and lines[0].lower() in KEYWORDS:
+            potential_code = lines[1]
+            potential_link = lines[2]
 
             if re.match(r'^[\wÇçĞğİıÖöŞşÜü-]+$', potential_code) and re.match(link_pattern, potential_link, re.IGNORECASE):
                 code = potential_code
                 link = potential_link
-                print(f"📡 FORMAT 2 | Kod: {code} | Gecikme: {delay:.1f}sn")
+                print(f"📡 FORMAT 1 | Kelime: {lines[0]} | Kod: {code}")
+
+        # FORMAT 2: kod\nlink (2 satır)
+        if not code:
+            potential_code = lines[0]
+            potential_link = lines[1]
+
+            if re.match(r'^[\wÇçĞğİıÖöŞşÜü-]+$', potential_code) and re.match(link_pattern, potential_link, re.IGNORECASE):
+                code = potential_code
+                link = potential_link
+                print(f"📡 FORMAT 2 | Kod: {code}")
 
         if not code or not link:
             return
 
-        # Yasak kelime kontrolü - cache'den, hızlı
-        if has_banned_word_fast(code, link):
-            print(f"🚫 Yasak kelime tespit edildi: {code} | {link}")
+        # Yasak kelime kontrolü
+        if has_banned_word(code) or has_banned_word(link):
+            print(f"🚫 Yasak kelime: {code}")
             return
 
-        # SADECE MEMORY CACHE KONTROL - DB'YE HİÇ GİTME
-        if is_code_in_memory(code):
-            print(f"🔄 Tekrar (memory): {code}")
+        # Tekrar kontrolü (memory cache)
+        if is_code_sent(code):
+            print(f"🔄 Tekrar: {code}")
             return
 
-        # ÖNCE MEMORY'E EKLE - tekrar gönderimi engelle
-        add_code_to_memory(code)
-
-        # ANINDA GÖNDER - HİÇBİR ŞEY BEKLEME
-        send_to_all_channels_instant(code, link)
-
-        # DB kaydını ARKA PLANDA yap - thread pool'da, bekleme yok
-        run_sync_fire_and_forget(mark_code_as_sent, code)
+        # Kodu işaretle ve gönder
+        mark_code_sent(code)
+        await send_to_all_channels(code, link)
 
     except Exception as e:
-        print(f"❌ Mesaj işleme hatası: {e}")
+        print(f"❌ İşleme hatası: {e}")
 
-def has_banned_word_fast(code: str, link: str = "") -> bool:
-    """Yasak kelime kontrolü - HIZLI VERSİYON"""
-    combined = (code + " " + link).lower()
-    for word in banned_words_cache:
-        if word in combined:
-            return True
-    return False
+# ══════════════════════════════════════════════════════════════════════════════
+# EVENT HANDLER
+# ══════════════════════════════════════════════════════════════════════════════
 
-# —————— AKILLI CACHE SİSTEMİ ——————
-# Website değişiklik yapınca DB'deki cache_version artar, bot bunu kontrol eder
-
-# Cache değişkenleri
-listening_channels_cache = []
-listening_channels_cache_set = set()  # Hızlı lookup için SET
-keywords_cache = []
-keywords_cache_set = set()  # Hızlı lookup için SET
-banned_words_cache = []
-active_channels_cache = []
-channel_user_map_cache = {}  # {channel_id: user_id} - Kanal -> Kullanıcı eşlemesi
-admin_links_cache = []  # [(user_id, channel_id, link_code, link_url), ...] - Özel linkler
-
-# Entity cache - access hash sorununu çözmek için
-entity_cache = {}  # {channel_id: entity}
-
-# Cache kontrol değişkenleri
-cache_version_local = 0
-cache_last_check = 0
-CACHE_CHECK_INTERVAL = 15  # Her 15 saniyede version kontrolü (daha sık)
-
-# Cleanup kontrolü
-last_cleanup_time = 0
-CLEANUP_INTERVAL = 300  # 5 dakikada bir cleanup
-
-# Event handler referansı - dinamik güncelleme için
-current_handler = None
-
-def get_db_cache_version():
-    """DB'deki cache version'ı al"""
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT version FROM cache_version WHERE id = 1")
-        result = cursor.fetchone()
-        return result[0] if result else 0
-    except Exception as e:
-        # Tablo yoksa hata vermez, 0 döner
-        print(f"⚠️ Cache version kontrol hatası: {e}")
-        return 0
-    finally:
-        if conn:
-            release_db_connection(conn)
-
-def get_channel_user_map():
-    """Tüm kanal-kullanıcı eşlemelerini al"""
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT uc.channel_id, uc.user_id FROM user_channels uc
-            INNER JOIN users u ON uc.user_id = u.id
-            WHERE uc.paused = false
-              AND u.is_banned = false
-              AND u.is_active = true
-              AND u.bot_enabled = true
-        """)
-        result = {row[0]: row[1] for row in cursor.fetchall()}
-        return result
-    except Exception as e:
-        print(f"❌ get_channel_user_map HATASI: {e}")
-        return {}
-    finally:
-        if conn:
-            release_db_connection(conn)
-
-def get_all_admin_links():
-    """Tüm admin linklerini al"""
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT user_id, channel_id, link_code, link_url
-            FROM admin_links
-            ORDER BY LENGTH(link_code) DESC
-        """)
-        result = cursor.fetchall()
-        return result
-    except Exception as e:
-        print(f"❌ get_all_admin_links HATASI: {e}")
-        return []
-    finally:
-        if conn:
-            release_db_connection(conn)
-
-def refresh_all_caches():
-    """Tüm cache'leri yenile"""
-    global listening_channels_cache, listening_channels_cache_set
-    global keywords_cache, keywords_cache_set
-    global banned_words_cache, active_channels_cache
-    global channel_user_map_cache, admin_links_cache
-
-    print("🔄 Tüm cache'ler yenileniyor...")
-
-    listening_channels_cache = get_listening_channels()
-    # Tüm ID varyantlarını set'e ekle
-    listening_channels_cache_set = set()
-    for ch_id in listening_channels_cache:
-        listening_channels_cache_set.update(get_all_channel_id_variants(ch_id))
-
-    keywords_cache = get_all_keywords()
-    keywords_cache_set = set(keywords_cache)  # Set olarak da tut
-
-    banned_words_cache = get_all_banned_words()
-    active_channels_cache = get_active_channels()
-    channel_user_map_cache = get_channel_user_map()
-    admin_links_cache = get_all_admin_links()
-
-    print(f"✅ Cache yenilendi: {len(listening_channels_cache)} dinleme, {len(keywords_cache)} keyword, {len(banned_words_cache)} banned, {len(active_channels_cache)} aktif kanal")
-
-def check_and_refresh_cache():
-    """Cache version kontrolü yap, değiştiyse yenile"""
-    global cache_version_local, cache_last_check
-    now = time.time()
-
-    # Her 15 saniyede bir kontrol et
-    if now - cache_last_check < CACHE_CHECK_INTERVAL:
-        return False
-
-    cache_last_check = now
-    db_version = get_db_cache_version()
-
-    if db_version != cache_version_local:
-        print(f"📢 Cache version değişti: {cache_version_local} -> {db_version}")
-        cache_version_local = db_version
-        refresh_all_caches()
-        return True  # Cache değişti
-
-    return False
-
-def get_listening_channels_cached():
-    """Dinleme kanallarını cache'den al"""
-    return listening_channels_cache
-
-def get_keywords_cached():
-    """Anahtar kelimeleri cache'den al"""
-    return keywords_cache
-
-def get_banned_words_cached():
-    """Yasak kelimeleri cache'den al"""
-    return banned_words_cache
-
-def get_active_channels_cached():
-    """Aktif kanalları cache'den al"""
-    return active_channels_cache
-
-def get_channel_user_id_cached(channel_id: int):
-    """Kanalın aktif kullanıcısını cache'den al"""
-    return channel_user_map_cache.get(channel_id)
-
-def get_custom_link_cached(user_id: int, channel_id: int, code: str, original_link: str) -> str:
-    """Kullanıcının özel linkini cache'den al"""
-    code_lower = code.lower()
-    link_lower = original_link.lower()
-
-    for link_user_id, link_channel_id, link_code, link_url in admin_links_cache:
-        if link_user_id == user_id and link_channel_id == channel_id:
-            link_code_lower = link_code.lower()
-            if link_code_lower in code_lower or link_code_lower in link_lower:
-                return link_url
-    return None
-
-def get_link_for_channel_cached(channel_id: int, code: str, original_link: str) -> str:
-    """Kanal için uygun linki cache'den al - önce özel link, yoksa orijinal"""
-    user_id = get_channel_user_id_cached(channel_id)
-    if user_id:
-        custom_link = get_custom_link_cached(user_id, channel_id, code, original_link)
-        if custom_link:
-            return custom_link
-    return original_link
-
-# —————— DİNAMİK EVENT HANDLER ——————
-async def setup_message_handler():
-    """Dinleme kanalları için event handler'ı kur"""
-    global current_handler
-
-    # Eski handler'ı kaldır
-    if current_handler:
-        client.remove_event_handler(current_handler)
-        print("🔄 Eski event handler kaldırıldı")
-
-    # Dinleme kanallarını al
-    channels = listening_channels_cache.copy()
-
-    if not channels:
-        print("⚠️ Dinleme kanalı yok, tüm mesajlar dinlenecek")
-        # Fallback: tüm mesajları dinle ve filtrele
-        @client.on(events.NewMessage())
-        async def fallback_handler(event):
-            await filtered_message_handler(event)
-        current_handler = fallback_handler
-        return
-
-    # Kanalların entity'lerini yükle (access hash için)
-    valid_channels = []
-    for ch_id in channels:
-        try:
-            # Entity'yi al ve cache'le
-            if ch_id not in entity_cache:
-                entity = await client.get_entity(ch_id)
-                entity_cache[ch_id] = entity
-                print(f"   ✅ Entity yüklendi: {ch_id} -> {getattr(entity, 'title', 'Unknown')}")
-            valid_channels.append(ch_id)
-        except Exception as e:
-            print(f"   ❌ Entity yüklenemedi {ch_id}: {e}")
-
-    if valid_channels:
-        # Sadece bu kanalları dinle - ÇOK DAHA VERİMLİ!
-        @client.on(events.NewMessage(chats=valid_channels))
-        async def channel_handler(event):
+def setup_handler():
+    """Event handler'ı kur"""
+    if LISTENING_CHANNELS:
+        @client.on(events.NewMessage(chats=LISTENING_CHANNELS))
+        async def handler(event):
             await process_message(event)
-
-        current_handler = channel_handler
-        print(f"✅ Event handler kuruldu: {len(valid_channels)} kanal dinleniyor")
+        print(f"✅ {len(LISTENING_CHANNELS)} dinleme kanalı ayarlandı")
     else:
-        print("⚠️ Hiçbir kanala erişilemedi, fallback handler kullanılacak")
-        @client.on(events.NewMessage())
-        async def fallback_handler(event):
-            await filtered_message_handler(event)
-        current_handler = fallback_handler
+        print("⚠️ DİNLEME KANALI TANIMLANMAMIŞ! Lütfen LISTENING_CHANNELS listesini doldurun.")
 
-async def filtered_message_handler(event):
-    """Fallback: tüm mesajları filtrele (verimsiz ama güvenli)"""
-    try:
-        if not event.chat:
-            return
-
-        current_channel_id = event.chat.id
-
-        # Set lookup - O(1), çok hızlı
-        if current_channel_id in listening_channels_cache_set:
-            await process_message(event)
-    except Exception as e:
-        print(f"❌ Handler hatası: {e}")
-
-# —————— KEEP ALIVE (ARKA PLAN - BEKLEME YOK) ——————
-dialog_refresh_counter = 0
-DIALOG_REFRESH_INTERVAL = 5  # Her 5 dakikada bir dialogs yenile (daha sık)
+# ══════════════════════════════════════════════════════════════════════════════
+# KEEP ALIVE
+# ══════════════════════════════════════════════════════════════════════════════
 
 async def keep_alive():
-    """Bot'u canlı tut ve cache'i kontrol et - ARKA PLANDA"""
-    global dialog_refresh_counter, last_cleanup_time
-
+    """Bot'u canlı tut ve cache'i güncelle"""
     while True:
         try:
             await client.get_me()
+            maybe_refresh_cache()
 
-            # Cleanup - 5 dakikada bir - ARKA PLANDA
+            # Memory temizliği
             now = time.time()
-            if now - last_cleanup_time > CLEANUP_INTERVAL:
-                last_cleanup_time = now
-                run_sync_fire_and_forget(cleanup_old_codes)
-
-                # Memory cache temizliği
-                expired = [k for k, v in sent_codes_memory.items() if now - v > MEMORY_CODE_TTL]
-                for k in expired:
-                    del sent_codes_memory[k]
-                if expired:
-                    print(f"🧹 Memory cache: {len(expired)} eski kod temizlendi")
-
-            # Bot status - ARKA PLANDA
-            run_sync_fire_and_forget(update_bot_status, True)
-
-            # Cache version kontrolü - ARKA PLANDA
-            run_sync_fire_and_forget(check_and_refresh_cache)
-
-            # Periyodik dialog yenileme - yeni eklenen kanallar için
-            dialog_refresh_counter += 1
-            if dialog_refresh_counter >= DIALOG_REFRESH_INTERVAL:
-                dialog_refresh_counter = 0
-                try:
-                    dialogs = await client.get_dialogs()
-                    print(f"🔄 Dialogs yenilendi: {len(dialogs)} dialog")
-                except Exception as e:
-                    print(f"⚠️ Dialog yenileme hatası: {e}")
+            expired = [k for k, v in sent_codes.items() if now - v > CODE_TTL]
+            for k in expired:
+                del sent_codes[k]
 
         except Exception as e:
             print(f"⚠️ Keep alive hatası: {e}")
 
-        await asyncio.sleep(30)  # Her 30 saniyede kontrol (daha sık)
+        await asyncio.sleep(60)  # Her 1 dakikada bir
 
-# —————— KANAL ERİŞİM KONTROLÜ ——————
-async def verify_channel_access():
-    """Dinleme kanallarına erişimi doğrula ve access hash'leri yükle"""
-    print("📋 Kanal erişimleri kontrol ediliyor...")
+# ══════════════════════════════════════════════════════════════════════════════
+# BAŞLANGIÇ
+# ══════════════════════════════════════════════════════════════════════════════
 
-    # Önce tüm dialog'ları yükle
-    dialogs = await client.get_dialogs()
-    print(f"   {len(dialogs)} dialog yüklendi")
-
-    # Dialog'lardan entity'leri cache'le
-    for dialog in dialogs:
-        if dialog.entity and hasattr(dialog.entity, 'id'):
-            entity_id = dialog.entity.id
-            normalized = normalize_channel_id(entity_id)
-            entity_cache[entity_id] = dialog.entity
-            entity_cache[normalized] = dialog.entity
-
-    accessible = []
-    inaccessible = []
-
-    for ch_id in listening_channels_cache:
-        try:
-            # Önce cache'e bak
-            if ch_id in entity_cache:
-                entity = entity_cache[ch_id]
-            else:
-                # Cache'de yoksa API'den al
-                entity = await client.get_entity(ch_id)
-                entity_cache[ch_id] = entity
-
-            title = getattr(entity, 'title', 'Unknown')
-            accessible.append((ch_id, title))
-            print(f"   ✅ {ch_id}: {title}")
-
-        except Exception as e:
-            inaccessible.append((ch_id, str(e)))
-            print(f"   ❌ {ch_id}: {e}")
-
-    if inaccessible:
-        print(f"\n⚠️ ERİŞİLEMEYEN KANALLAR ({len(inaccessible)}):")
-        for ch_id, error in inaccessible:
-            print(f"   {ch_id}: {error}")
-        run_sync_fire_and_forget(log_bot_message, "warning", f"Erişilemeyen kanallar: {len(inaccessible)}", str([x[0] for x in inaccessible])[:500])
-
-    return accessible, inaccessible
-
-# —————— BAŞLANGIÇ ——————
 async def main():
     """Bot'u başlat"""
     print("=" * 60)
-    print("🤖 Telegram Kod Botu Başlatılıyor...")
-    print("   ANINDA GÖNDERİM versiyonu - Sıfır bekleme")
+    print("🤖 Telegram Kod Botu - Sadeleştirilmiş Versiyon")
     print("=" * 60)
 
     try:
-        # Connection pool'u başlat
-        init_connection_pool()
-
         await client.start()
-        update_bot_status(True)
-        log_bot_message("info", "Bot başlatıldı (aninda-gonderim)")
 
         me = await client.get_me()
-        print(f"✅ Telethon: {me.first_name} (@{me.username}) [ID: {me.id}]")
+        print(f"✅ Telethon: {me.first_name} (@{me.username})")
 
         # Bot token kontrol
         if BOT_TOKEN:
@@ -962,58 +374,39 @@ async def main():
                 response = await http_client.get(f"{TELEGRAM_BOT_API}/getMe")
                 bot_data = response.json()
                 if bot_data.get("ok"):
-                    print(f"✅ Bot API: @{bot_data['result'].get('username')} [ID: {bot_data['result'].get('id')}]")
-                else:
-                    print(f"❌ Bot API hatası: {bot_data}")
+                    print(f"✅ Bot API: @{bot_data['result'].get('username')}")
             except Exception as e:
                 print(f"❌ Bot API hatası: {e}")
 
-        # Cache'i başlat
-        print("\n🔄 Cache sistemi başlatılıyor...")
-        refresh_all_caches()
+        # Hedef kanalları yükle
+        print("\n📥 Hedef kanallar yükleniyor...")
+        load_target_channels()
 
-        # Kanal erişimlerini doğrula
-        print("\n📡 Kanal erişimleri kontrol ediliyor...")
-        accessible, inaccessible = await verify_channel_access()
+        # Event handler kur
+        setup_handler()
 
         print(f"\n📊 Özet:")
-        print(f"   Dinleme kanalları: {len(listening_channels_cache)} (erişilebilir: {len(accessible)})")
-        print(f"   Hedef kanallar: {len(active_channels_cache)}")
-        print(f"   Anahtar kelimeler: {keywords_cache}")
-        print(f"   HTTP timeout: 3 saniye (hızlı)")
-        print(f"   Gönderim modu: ANINDA (fire-and-forget)")
-
-        # Event handler'ı kur
-        print("\n🔧 Event handler kuruluyor...")
-        await setup_message_handler()
+        print(f"   Dinleme kanalları: {len(LISTENING_CHANNELS)} (hardcoded)")
+        print(f"   Anahtar kelimeler: {KEYWORDS if KEYWORDS else 'YOK'}")
+        print(f"   Yasak kelimeler: {BANNED_WORDS if BANNED_WORDS else 'YOK'}")
+        print(f"   Hedef kanallar: {len(target_channels_cache)} (DB'den)")
 
         # Keep alive başlat
         asyncio.create_task(keep_alive())
 
-        print("")
-        print("=" * 60)
-        print("🚀 Bot çalışıyor! Mesajlar ANINDA gönderilecek!")
-        print("   Sıfır bekleme modu aktif")
-        print("=" * 60)
-        print("")
+        print("\n" + "=" * 60)
+        print("🚀 Bot çalışıyor!")
+        print("=" * 60 + "\n")
 
         await client.run_until_disconnected()
 
     except Exception as e:
         print(f"❌ Bot hatası: {e}")
+        import traceback
         traceback.print_exc()
-        update_bot_status(False, str(e)[:200])
-        log_bot_message("error", "Bot hatası", str(e)[:500])
     finally:
-        update_bot_status(False)
         await http_client.aclose()
         await client.disconnect()
-        # Thread executor'u kapat
-        thread_executor.shutdown(wait=False)
-        # Connection pool'u kapat
-        if connection_pool:
-            connection_pool.closeall()
-            print("✅ Connection pool kapatıldı")
 
 if __name__ == "__main__":
     asyncio.run(main())
