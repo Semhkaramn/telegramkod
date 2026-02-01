@@ -7,8 +7,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 interface Stats {
   users: number;
   channels: { total: number; active: number; paused: number };
-  listeningChannels: number;
-  codes: { daily: number; weekly: number; monthly: number };
 }
 
 export default function AdminDashboard() {
@@ -18,19 +16,21 @@ export default function AdminDashboard() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const [statsRes, usersRes] = await Promise.all([
-          fetch("/api/stats"),
+        const [channelsRes, usersRes] = await Promise.all([
+          fetch("/api/channels"),
           fetch("/api/users"),
         ]);
 
-        const statsData = statsRes.ok ? await statsRes.json() : null;
+        const channelsData = channelsRes.ok ? await channelsRes.json() : [];
         const usersData = usersRes.ok ? await usersRes.json() : [];
+
+        const channels = Array.isArray(channelsData) ? channelsData : [];
+        const activeCount = channels.filter((ch: { paused: boolean }) => !ch.paused).length;
+        const pausedCount = channels.filter((ch: { paused: boolean }) => ch.paused).length;
 
         setStats({
           users: Array.isArray(usersData) ? usersData.length : 0,
-          channels: statsData?.channels || { total: 0, active: 0, paused: 0 },
-          listeningChannels: statsData?.listeningChannels || 0,
-          codes: statsData?.codes || { daily: 0, weekly: 0, monthly: 0 },
+          channels: { total: channels.length, active: activeCount, paused: pausedCount },
         });
       } catch (error) {
         console.error("Error fetching stats:", error);
@@ -46,8 +46,8 @@ export default function AdminDashboard() {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-48 bg-slate-800" />
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[1, 2, 3, 4].map((i) => (
+        <div className="grid gap-4 md:grid-cols-2">
+          {[1, 2].map((i) => (
             <Skeleton key={i} className="h-32 bg-slate-800" />
           ))}
         </div>
@@ -67,7 +67,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2">
         <Card className="bg-slate-900/50 border-slate-700/50 backdrop-blur-sm">
           <CardHeader className="pb-2">
             <CardDescription className="text-slate-400">Kullanıcılar</CardDescription>
@@ -87,30 +87,6 @@ export default function AdminDashboard() {
             <div className="flex gap-3 text-sm">
               <span className="text-blue-400">{stats?.channels.active || 0} Aktif</span>
               <span className="text-amber-400">{stats?.channels.paused || 0} Durduruldu</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-slate-900/50 border-slate-700/50 backdrop-blur-sm">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-slate-400">Dinleme Kanalları</CardDescription>
-            <CardTitle className="text-3xl text-slate-100">{stats?.listeningChannels || 0}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-slate-500">Kaynak kanallar</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-slate-900/50 border-slate-700/50 backdrop-blur-sm">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-slate-400">Bugün Gönderilen</CardDescription>
-            <CardTitle className="text-3xl text-slate-100">{stats?.codes.daily || 0}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-sm text-slate-500">
-              <span>Hafta: {stats?.codes.weekly || 0}</span>
-              <span className="mx-2">|</span>
-              <span>Ay: {stats?.codes.monthly || 0}</span>
             </div>
           </CardContent>
         </Card>
@@ -154,21 +130,6 @@ export default function AdminDashboard() {
               <div>
                 <p className="font-medium text-slate-100">Kanal Yönetimi</p>
                 <p className="text-sm text-slate-500">Hedef kanalları yönet</p>
-              </div>
-            </a>
-            <a
-              href="/admin/listening"
-              className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors group border border-slate-700/50"
-            >
-              <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center group-hover:bg-blue-500/30 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400">
-                  <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
-                  <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
-                </svg>
-              </div>
-              <div>
-                <p className="font-medium text-slate-100">Dinleme Kanalları</p>
-                <p className="text-sm text-slate-500">Kod kaynaklarını yönet</p>
               </div>
             </a>
           </CardContent>
