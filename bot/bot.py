@@ -32,6 +32,11 @@ async def run_sync(func, *args, **kwargs):
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(thread_executor, functools.partial(func, *args, **kwargs))
 
+def run_sync_fire_and_forget(func, *args, **kwargs):
+    """Senkron fonksiyonu arka planda çalıştır - BEKLEME YOK"""
+    import functools
+    thread_executor.submit(functools.partial(func, *args, **kwargs))
+
 # Kontroller
 if not api_id or not api_hash:
     print("❌ HATA: API_ID ve API_HASH ayarlanmalı!")
@@ -406,10 +411,9 @@ if SESSION_STRING:
 else:
     client = TelegramClient('bot_session', api_id, api_hash)
 
-# —————— HTTP CLIENT (Optimized) ——————
-# Connection pooling ve keep-alive için limits ayarla
+# —————— HTTP CLIENT (HIZLI - 3 SANİYE TIMEOUT) ——————
 http_client = httpx.AsyncClient(
-    timeout=httpx.Timeout(10.0, connect=3.0),  # 10 saniye toplam, 3 saniye bağlantı
+    timeout=httpx.Timeout(3.0, connect=2.0),  # 3 saniye toplam, 2 saniye bağlantı - HIZLI
     limits=httpx.Limits(max_keepalive_connections=50, max_connections=100)
 )
 
@@ -475,71 +479,51 @@ def get_all_channel_id_variants(channel_id: int) -> set:
 
     return variants
 
-# —————— KOD GÖNDER ——————
-async def send_to_single_channel(channel_id: int, code: str, original_link: str) -> dict:
-    """Tek kanala kod gönder (paralel gönderim için)"""
+# —————— KOD GÖNDER (ANINDA - BEKLEME YOK) ——————
+async def send_to_single_channel_fire(channel_id: int, code: str, original_link: str):
+    """Tek kanala kod gönder - fire and forget, bekleme yok"""
     try:
-        # Cache'den link al - zaten memory'de, çok hızlı
         final_link = get_link_for_channel_cached(channel_id, code, original_link)
         message = f"`{code}`\n\n{final_link}"
 
         result = await send_message_via_bot(channel_id, message)
 
         if result.get("ok"):
-            # İstatistik kaydını arka planda yap (fire and forget)
-            asyncio.create_task(run_sync(record_code_stat, channel_id, code))
-            return {"channel_id": channel_id, "success": True}
+            # İstatistik arka planda - thread pool'da
+            run_sync_fire_and_forget(record_code_stat, channel_id, code)
+            print(f"   ✅ Gönderildi: {channel_id}")
         else:
-            return {"channel_id": channel_id, "success": False, "error": result.get('error')}
+            print(f"   ❌ Hata {channel_id}: {result.get('error', 'unknown')}")
     except Exception as e:
-        print(f"❌ Gönderim hatası {channel_id}: {e}")
-        return {"channel_id": channel_id, "success": False, "error": str(e)}
+        print(f"   ❌ Exception {channel_id}: {e}")
 
-async def send_to_all_channels(code: str, original_link: str):
-    """Kodu tüm aktif kanallara PARALEL olarak gönder - ULTRA HIZLI"""
+def send_to_all_channels_instant(code: str, original_link: str):
+    """Kodu tüm aktif kanallara ANINDA gönder - HİÇ BEKLEME YOK"""
     try:
-        # Cache'den al - memory'de, anında
         active_channels = active_channels_cache.copy()
 
         if not active_channels:
             print(f"⚠️ Aktif kanal yok! Kod gönderilemedi: {code}")
-            asyncio.create_task(run_sync(log_bot_message, "warning", f"Aktif kanal yok, kod gönderilemedi: {code}"))
             return
 
-        start_time = time.time()
-        print(f"🚀 {len(active_channels)} kanala gönderim başlıyor: {code}")
+        print(f"🚀 ANINDA GÖNDERİM: {code} -> {len(active_channels)} kanal")
 
-        # Tüm kanallara paralel gönderim
-        tasks = [
-            send_to_single_channel(channel_id, code, original_link)
-            for channel_id in active_channels
-        ]
+        # Her kanala ayrı async task oluştur - BEKLEME YOK
+        for channel_id in active_channels:
+            asyncio.create_task(send_to_single_channel_fire(channel_id, code, original_link))
 
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Sonuçları say
-        sent_count = sum(1 for r in results if isinstance(r, dict) and r.get("success"))
-        error_count = len(results) - sent_count
-
-        elapsed = (time.time() - start_time) * 1000  # milisaniye
-
-        if sent_count > 0:
-            print(f"✅ Kod gönderildi: {code} | {sent_count}/{len(active_channels)} kanal | {elapsed:.0f}ms")
-            asyncio.create_task(run_sync(log_bot_message, "info", f"Kod gönderildi: {code}", f"{sent_count} başarılı, {error_count} hata, {elapsed:.0f}ms"))
-        else:
-            print(f"❌ Kod hiçbir kanala gönderilemedi: {code}")
+        # Log arka planda
+        run_sync_fire_and_forget(log_bot_message, "info", f"Kod gönderildi: {code}", f"{len(active_channels)} kanala")
 
     except Exception as e:
-        print(f"❌ Toplu gönderim hatası: {e}")
-        asyncio.create_task(run_sync(log_bot_message, "error", "Toplu gönderim hatası", str(e)[:500]))
+        print(f"❌ Gönderim hatası: {e}")
 
-# —————— MESAJ İŞLEME (ULTRA OPTİMİZE) ——————
+# —————— MESAJ İŞLEME (ANINDA - SIFIR BEKLEME) ——————
 async def process_message(event):
     """
-    Mesajı işle - 2 format desteklenir - ULTRA HIZLI VERSİYON
+    Mesajı işle - ANINDA GÖNDER, HİÇBİR ŞEY BEKLEME
     """
     try:
-        # Mesaj gecikme kontrolü
         msg_time = event.message.date.timestamp()
         now_time = time.time()
         delay = now_time - msg_time
@@ -598,22 +582,22 @@ async def process_message(event):
             print(f"🚫 Yasak kelime tespit edildi: {code} | {link}")
             return
 
-        # ÖNCELİKLE MEMORY CACHE KONTROL - DB'YE HİÇ GİTME
+        # SADECE MEMORY CACHE KONTROL - DB'YE HİÇ GİTME
         if is_code_in_memory(code):
             print(f"🔄 Tekrar (memory): {code}")
             return
 
-        # Memory'de yoksa DB'ye git
-        if await run_sync(mark_code_as_sent, code):
-            add_code_to_memory(code)  # Memory'e de ekle
-            await send_to_all_channels(code, link)
-        else:
-            add_code_to_memory(code)  # Zaten var, memory'e ekle
-            print(f"🔄 Tekrar (DB): {code}")
+        # ÖNCE MEMORY'E EKLE - tekrar gönderimi engelle
+        add_code_to_memory(code)
+
+        # ANINDA GÖNDER - HİÇBİR ŞEY BEKLEME
+        send_to_all_channels_instant(code, link)
+
+        # DB kaydını ARKA PLANDA yap - thread pool'da, bekleme yok
+        run_sync_fire_and_forget(mark_code_as_sent, code)
 
     except Exception as e:
         print(f"❌ Mesaj işleme hatası: {e}")
-        asyncio.create_task(run_sync(log_bot_message, "error", "Mesaj işleme hatası", str(e)[:500]))
 
 def has_banned_word_fast(code: str, link: str = "") -> bool:
     """Yasak kelime kontrolü - HIZLI VERSİYON"""
@@ -861,23 +845,23 @@ async def filtered_message_handler(event):
     except Exception as e:
         print(f"❌ Handler hatası: {e}")
 
-# —————— KEEP ALIVE ——————
+# —————— KEEP ALIVE (ARKA PLAN - BEKLEME YOK) ——————
 dialog_refresh_counter = 0
 DIALOG_REFRESH_INTERVAL = 5  # Her 5 dakikada bir dialogs yenile (daha sık)
 
 async def keep_alive():
-    """Bot'u canlı tut ve cache'i kontrol et"""
+    """Bot'u canlı tut ve cache'i kontrol et - ARKA PLANDA"""
     global dialog_refresh_counter, last_cleanup_time
 
     while True:
         try:
             await client.get_me()
 
-            # Cleanup - 5 dakikada bir
+            # Cleanup - 5 dakikada bir - ARKA PLANDA
             now = time.time()
             if now - last_cleanup_time > CLEANUP_INTERVAL:
                 last_cleanup_time = now
-                await run_sync(cleanup_old_codes)
+                run_sync_fire_and_forget(cleanup_old_codes)
 
                 # Memory cache temizliği
                 expired = [k for k, v in sent_codes_memory.items() if now - v > MEMORY_CODE_TTL]
@@ -886,15 +870,11 @@ async def keep_alive():
                 if expired:
                     print(f"🧹 Memory cache: {len(expired)} eski kod temizlendi")
 
-            await run_sync(update_bot_status, True)
+            # Bot status - ARKA PLANDA
+            run_sync_fire_and_forget(update_bot_status, True)
 
-            # Cache version kontrolü
-            cache_changed = await run_sync(check_and_refresh_cache)
-
-            # Cache değiştiyse event handler'ı güncelle
-            if cache_changed:
-                print("🔄 Cache değişti, event handler güncelleniyor...")
-                await setup_message_handler()
+            # Cache version kontrolü - ARKA PLANDA
+            run_sync_fire_and_forget(check_and_refresh_cache)
 
             # Periyodik dialog yenileme - yeni eklenen kanallar için
             dialog_refresh_counter += 1
@@ -908,7 +888,6 @@ async def keep_alive():
 
         except Exception as e:
             print(f"⚠️ Keep alive hatası: {e}")
-            await run_sync(update_bot_status, True, str(e)[:200])
 
         await asyncio.sleep(30)  # Her 30 saniyede kontrol (daha sık)
 
@@ -954,7 +933,7 @@ async def verify_channel_access():
         print(f"\n⚠️ ERİŞİLEMEYEN KANALLAR ({len(inaccessible)}):")
         for ch_id, error in inaccessible:
             print(f"   {ch_id}: {error}")
-        await run_sync(log_bot_message, "warning", f"Erişilemeyen kanallar: {len(inaccessible)}", str([x[0] for x in inaccessible])[:500])
+        run_sync_fire_and_forget(log_bot_message, "warning", f"Erişilemeyen kanallar: {len(inaccessible)}", str([x[0] for x in inaccessible])[:500])
 
     return accessible, inaccessible
 
@@ -963,7 +942,7 @@ async def main():
     """Bot'u başlat"""
     print("=" * 60)
     print("🤖 Telegram Kod Botu Başlatılıyor...")
-    print("   ULTRA OPTİMİZE versiyon - Yüksek trafik için")
+    print("   ANINDA GÖNDERİM versiyonu - Sıfır bekleme")
     print("=" * 60)
 
     try:
@@ -972,7 +951,7 @@ async def main():
 
         await client.start()
         update_bot_status(True)
-        log_bot_message("info", "Bot başlatıldı (ultra-optimized)")
+        log_bot_message("info", "Bot başlatıldı (aninda-gonderim)")
 
         me = await client.get_me()
         print(f"✅ Telethon: {me.first_name} (@{me.username}) [ID: {me.id}]")
@@ -1001,8 +980,8 @@ async def main():
         print(f"   Dinleme kanalları: {len(listening_channels_cache)} (erişilebilir: {len(accessible)})")
         print(f"   Hedef kanallar: {len(active_channels_cache)}")
         print(f"   Anahtar kelimeler: {keywords_cache}")
-        print(f"   Thread pool: 100 worker")
-        print(f"   DB pool: 10-100 connection")
+        print(f"   HTTP timeout: 3 saniye (hızlı)")
+        print(f"   Gönderim modu: ANINDA (fire-and-forget)")
 
         # Event handler'ı kur
         print("\n🔧 Event handler kuruluyor...")
@@ -1013,8 +992,8 @@ async def main():
 
         print("")
         print("=" * 60)
-        print("🚀 Bot çalışıyor! Mesajlar bekleniyor...")
-        print("   ULTRA HIZLI mod - Memory cache aktif")
+        print("🚀 Bot çalışıyor! Mesajlar ANINDA gönderilecek!")
+        print("   Sıfır bekleme modu aktif")
         print("=" * 60)
         print("")
 
