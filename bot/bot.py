@@ -1,16 +1,57 @@
 """
 Telegram Kod Botu - ANLIK DİNLEME VERSİYONU
+- Detaylı Loglama Eklendi
 """
 
 import asyncio
 import re
 import time
 import os
+import sys
+import logging
 from datetime import datetime
 import httpx
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from telethon.errors import ChannelPrivateError, ChannelInvalidError
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LOGGING AYARLARI (Heroku için)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Heroku için stdout'a loglama
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s | %(levelname)s | %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Flush logları hemen yazdırmak için
+sys.stdout.reconfigure(line_buffering=True)
+
+def log_info(message):
+    """Bilgi logu"""
+    logger.info(message)
+    sys.stdout.flush()
+
+def log_success(message):
+    """Başarı logu"""
+    logger.info(f"✅ {message}")
+    sys.stdout.flush()
+
+def log_warning(message):
+    """Uyarı logu"""
+    logger.warning(f"⚠️ {message}")
+    sys.stdout.flush()
+
+def log_error(message):
+    """Hata logu"""
+    logger.error(f"❌ {message}")
+    sys.stdout.flush()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # HARDCODED CONFIG
@@ -24,10 +65,10 @@ LISTENING_CHANNELS = [
 ]
 
 CHANNEL_NAMES = {
-    -1002059757502: "Kanal1",
-    -1001513128130: "Kanal2",
-    -1002980401785: "Kanal3",
-    -1001904588149: "Kanal4"
+    -1002059757502: "bamco",
+    -1001513128130: "soft",
+    -1002980401785: "denemetwittr",
+    -1001904588149: "bonusuzmanı"
 }
 
 KEYWORDS = {
@@ -144,6 +185,11 @@ def load_target_channels():
         target_channels_cache = list(set([row[0] for row in results]))
         channel_user_map = {row[0]: row[1] for row in results}
 
+        log_info(f"📊 Hedef kanal sayısı: {len(target_channels_cache)}")
+        for ch_id in target_channels_cache:
+            user_id = channel_user_map.get(ch_id, "?")
+            log_info(f"   - Kanal: {ch_id} (User: {user_id})")
+
         cursor.execute("""
             SELECT user_id, channel_id, link_code, link_url
             FROM admin_links
@@ -157,12 +203,14 @@ def load_target_channels():
                 admin_links_cache[key] = {}
             admin_links_cache[key][link_code.lower()] = link_url
 
+        log_info(f"🔗 Admin link sayısı: {len(admin_links_cache)}")
+
         cursor.close()
         conn.close()
         return True
 
     except Exception as e:
-        print(f"DB hatası: {e}")
+        log_error(f"DB hatası: {e}")
         return False
 
 def get_link_for_channel(channel_id: int, code: str, original_link: str) -> str:
@@ -181,6 +229,7 @@ def maybe_refresh_cache():
     now = time.time()
     if now - cache_last_update > CACHE_TTL:
         cache_last_update = now
+        log_info("🔄 Cache yenileniyor...")
         load_target_channels()
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -207,7 +256,10 @@ inaccessible_channels = set()
 async def check_channel_access():
     global channel_entities, inaccessible_channels, channel_pts
 
+    log_info("🔍 Kaynak kanal erişimleri kontrol ediliyor...")
+
     for channel_id in LISTENING_CHANNELS:
+        channel_name = CHANNEL_NAMES.get(channel_id, str(channel_id))
         try:
             entity = await client.get_entity(channel_id)
             channel_entities[channel_id] = entity
@@ -221,16 +273,23 @@ async def check_channel_access():
             else:
                 last_seen_message_ids[channel_id] = 0
 
-        except (ChannelPrivateError, ChannelInvalidError):
+            log_success(f"Kaynak kanal erişimi OK: {channel_name} ({channel_id})")
+
+        except (ChannelPrivateError, ChannelInvalidError) as e:
             inaccessible_channels.add(channel_id)
-        except Exception:
+            log_error(f"Kaynak kanal ERİŞİM YOK: {channel_name} ({channel_id}) - {type(e).__name__}")
+        except Exception as e:
             inaccessible_channels.add(channel_id)
+            log_error(f"Kaynak kanal HATA: {channel_name} ({channel_id}) - {e}")
+
+    log_info(f"📡 Erişilebilir kaynak kanal: {len(channel_entities)}/{len(LISTENING_CHANNELS)}")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # AGRESİF POLLİNG
 # ══════════════════════════════════════════════════════════════════════════════
 
 async def aggressive_polling():
+    log_info("🚀 Aggressive polling başlatıldı...")
     while True:
         try:
             for channel_id in LISTENING_CHANNELS:
@@ -256,12 +315,13 @@ async def aggressive_polling():
                                 await process_message_from_polling(msg, channel_id)
                                 last_seen_message_ids[channel_id] = msg.id
 
-                except Exception:
-                    pass
+                except Exception as e:
+                    log_warning(f"Polling hatası ({channel_id}): {e}")
 
             await asyncio.sleep(POLLING_INTERVAL)
 
-        except Exception:
+        except Exception as e:
+            log_error(f"Polling döngü hatası: {e}")
             await asyncio.sleep(1)
 
 async def process_message_from_polling(message, channel_id):
@@ -289,7 +349,7 @@ async def periodic_catch_up():
 # MESAJ GÖNDERME
 # ══════════════════════════════════════════════════════════════════════════════
 
-async def send_message(chat_id: int, text: str) -> dict:
+async def send_message(chat_id: int, text: str, code: str) -> dict:
     try:
         url = f"{TELEGRAM_BOT_API}/sendMessage"
         payload = {
@@ -302,24 +362,45 @@ async def send_message(chat_id: int, text: str) -> dict:
         result = response.json()
 
         if result.get("ok"):
+            log_success(f"GÖNDERİM BAŞARILI | Kanal: {chat_id} | Kod: {code}")
             return {"success": True, "chat_id": chat_id}
         else:
-            return {"success": False, "chat_id": chat_id}
+            error_desc = result.get("description", "Bilinmeyen hata")
+            error_code = result.get("error_code", "?")
+            log_error(f"GÖNDERİM BAŞARISIZ | Kanal: {chat_id} | Kod: {code} | Hata: [{error_code}] {error_desc}")
+            return {"success": False, "chat_id": chat_id, "error": error_desc}
 
-    except Exception:
-        return {"success": False, "chat_id": chat_id}
+    except Exception as e:
+        log_error(f"GÖNDERİM EXCEPTION | Kanal: {chat_id} | Kod: {code} | Hata: {e}")
+        return {"success": False, "chat_id": chat_id, "error": str(e)}
 
 async def send_to_all_channels(code: str, link: str, source_channel: int):
+    source_name = CHANNEL_NAMES.get(source_channel, str(source_channel))
+
     if not target_channels_cache:
+        log_warning(f"HEDEF KANAL YOK! Kod: {code} | Kaynak: {source_name}")
         return
+
+    log_info(f"📤 GÖNDERİM BAŞLIYOR | Kod: {code} | Kaynak: {source_name} | Hedef Kanal Sayısı: {len(target_channels_cache)}")
 
     tasks = []
     for channel_id in target_channels_cache:
         final_link = get_link_for_channel(channel_id, code, link)
         message = f"`{code}`\n\n{final_link}"
-        tasks.append(send_message(channel_id, message))
+        tasks.append(send_message(channel_id, message, code))
 
-    await asyncio.gather(*tasks, return_exceptions=True)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Sonuçları say
+    success_count = 0
+    fail_count = 0
+    for r in results:
+        if isinstance(r, dict) and r.get("success"):
+            success_count += 1
+        else:
+            fail_count += 1
+
+    log_info(f"📊 GÖNDERİM TAMAMLANDI | Kod: {code} | Başarılı: {success_count} | Başarısız: {fail_count}")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # MESAJ İŞLEME
@@ -328,6 +409,7 @@ async def send_to_all_channels(code: str, link: str, source_channel: int):
 async def process_message(event):
     try:
         source_channel = event.chat_id
+        source_name = CHANNEL_NAMES.get(source_channel, str(source_channel))
 
         text = event.message.message
         if not text:
@@ -336,7 +418,9 @@ async def process_message(event):
         text = text.strip()
         lines = [l.strip() for l in text.splitlines() if l.strip()]
 
+        # Format kontrolü: en az 2 satır gerekli
         if len(lines) < 2:
+            log_info(f"📥 MESAJ ALINDI | Kaynak: {source_name} | FORMAT UYMUYOR: 2 satırdan az | İçerik: {text[:50]}...")
             return
 
         link_pattern = r'^(?:https?://)?(?:www\.)?[a-zA-Z0-9][-a-zA-Z0-9]*(?:\.[a-zA-Z0-9][-a-zA-Z0-9]*)+(?:/[^\s]*)?$'
@@ -344,6 +428,7 @@ async def process_message(event):
 
         code = None
         link = None
+        format_type = None
 
         # FORMAT 1: anahtar_kelime\nkod\nlink
         if len(lines) >= 3:
@@ -355,6 +440,7 @@ async def process_message(event):
                 if re.match(code_pattern, potential_code) and re.match(link_pattern, potential_link, re.IGNORECASE):
                     code = potential_code
                     link = potential_link
+                    format_type = "FORMAT-1 (keyword+kod+link)"
 
         # FORMAT 2: kod\nlink
         if not code:
@@ -364,27 +450,37 @@ async def process_message(event):
             if re.match(code_pattern, potential_code) and re.match(link_pattern, potential_link, re.IGNORECASE):
                 code = potential_code
                 link = potential_link
+                format_type = "FORMAT-2 (kod+link)"
 
         if not code or not link:
+            log_info(f"📥 MESAJ ALINDI | Kaynak: {source_name} | FORMAT UYMUYOR: Kod veya link bulunamadı | Satırlar: {lines[:3]}")
             return
 
         # Yasak kelime kontrolü
-        if has_banned_word(code):
+        banned = has_banned_word(code)
+        if banned:
+            log_info(f"📥 MESAJ ALINDI | Kaynak: {source_name} | YASAK KELİME (kod): '{banned}' | Kod: {code}")
             return
 
-        if has_banned_word(link):
+        banned_link = has_banned_word(link)
+        if banned_link:
+            log_info(f"📥 MESAJ ALINDI | Kaynak: {source_name} | YASAK KELİME (link): '{banned_link}' | Link: {link}")
             return
 
         # Tekrar kontrolü
         if is_code_sent(code):
+            log_info(f"📥 MESAJ ALINDI | Kaynak: {source_name} | TEKRAR KOD: {code}")
             return
+
+        # ✅ FORMAT UYGUN - İşleme al
+        log_success(f"FORMAT UYGUN | Kaynak: {source_name} | {format_type} | Kod: {code} | Link: {link}")
 
         mark_code_sent(code)
 
         await send_to_all_channels(code, link, source_channel)
 
-    except Exception:
-        pass
+    except Exception as e:
+        log_error(f"process_message hatası: {e}")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # EVENT HANDLER
@@ -395,6 +491,8 @@ def setup_handler():
         accessible_channels = [ch for ch in LISTENING_CHANNELS if ch not in inaccessible_channels]
 
         if accessible_channels:
+            log_info(f"🎯 Event handler kuruldu: {len(accessible_channels)} kanal")
+
             @client.on(events.NewMessage(chats=accessible_channels))
             async def handler(event):
                 channel_id = event.chat_id
@@ -422,8 +520,8 @@ async def keep_alive():
             for k in expired:
                 del sent_codes[k]
 
-        except Exception:
-            pass
+        except Exception as e:
+            log_warning(f"Keep-alive hatası: {e}")
 
         await asyncio.sleep(60)
 
@@ -433,10 +531,22 @@ async def keep_alive():
 
 async def main():
     try:
+        log_info("=" * 60)
+        log_info("🤖 TELEGRAM KOD BOTU BAŞLATILIYOR")
+        log_info("=" * 60)
+
         await client.start()
+        log_success("Telegram client bağlandı")
+
         await check_channel_access()
         load_target_channels()
         setup_handler()
+
+        log_info("=" * 60)
+        log_info("✅ BOT HAZIR - DİNLEME BAŞLADI")
+        log_info(f"📡 Dinlenen kaynak kanal: {len(channel_entities)}")
+        log_info(f"📤 Hedef kanal sayısı: {len(target_channels_cache)}")
+        log_info("=" * 60)
 
         asyncio.create_task(keep_alive())
         asyncio.create_task(aggressive_polling())
@@ -445,10 +555,11 @@ async def main():
         await client.run_until_disconnected()
 
     except Exception as e:
-        print(f"Bot hatası: {e}")
+        log_error(f"Bot kritik hatası: {e}")
     finally:
         await http_client.aclose()
         await client.disconnect()
+        log_info("Bot kapatıldı")
 
 if __name__ == "__main__":
     asyncio.run(main())
