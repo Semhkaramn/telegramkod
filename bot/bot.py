@@ -170,8 +170,9 @@ def get_link_for_channel(channel_id: int, code: str, original_link: str) -> str:
     if user_id:
         links = admin_links_cache.get((user_id, channel_id), {})
         code_lower = code.lower()
+        link_lower = original_link.lower()
         for link_code, link_url in links.items():
-            if link_code in code_lower:
+            if link_code in code_lower or link_code in link_lower:
                 return link_url
     return original_link
 
