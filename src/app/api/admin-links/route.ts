@@ -113,6 +113,65 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// PATCH - Update admin link
+export async function PATCH(request: NextRequest) {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { id, link_code, link_url } = body;
+
+    if (!id || !link_code || !link_url) {
+      return NextResponse.json(
+        { error: "id, link_code, and link_url are required" },
+        { status: 400 }
+      );
+    }
+
+    // Check if link exists and belongs to user
+    const existingLink = await prisma.adminLink.findUnique({
+      where: { id: parseInt(id) },
+    });
+
+    if (!existingLink) {
+      return NextResponse.json({ error: "Link bulunamadi" }, { status: 404 });
+    }
+
+    // Impersonation durumunda taklit edilen kullanicinin ID'sini kullan
+    const effectiveUserId = session.impersonatingUserId || session.userId;
+
+    if (existingLink.userId !== effectiveUserId && session.role !== "superadmin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    // Update the link
+    const updatedLink = await prisma.adminLink.update({
+      where: { id: parseInt(id) },
+      data: {
+        linkCode: link_code,
+        linkUrl: link_url,
+      },
+    });
+
+    // Cache'i invalidate et
+    await invalidateCache();
+
+    return NextResponse.json({
+      id: updatedLink.id,
+      channel_id: updatedLink.channelId.toString(),
+      link_code: updatedLink.linkCode,
+      link_url: updatedLink.linkUrl,
+      created_at: updatedLink.createdAt,
+    });
+  } catch (error) {
+    console.error("Error updating admin link:", error);
+    return NextResponse.json({ error: "Failed to update admin link" }, { status: 500 });
+  }
+}
+
 // DELETE - Remove admin link
 export async function DELETE(request: NextRequest) {
   try {
