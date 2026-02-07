@@ -158,6 +158,8 @@ import psycopg2
 target_channels_cache = []
 admin_links_cache = {}
 channel_user_map = {}
+channel_filter_mode = {}  # channel_id -> "all" veya "filtered"
+channel_filters = {}  # channel_id -> set of keywords
 cache_last_update = 0
 CACHE_TTL = 300
 
@@ -165,14 +167,15 @@ def get_db_connection():
     return psycopg2.connect(DATABASE_URL, connect_timeout=10)
 
 def load_target_channels():
-    global target_channels_cache, channel_user_map, admin_links_cache
+    global target_channels_cache, channel_user_map, admin_links_cache, channel_filter_mode, channel_filters
 
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
 
+        # Hedef kanalları ve filter_mode bilgisini çek
         cursor.execute("""
-            SELECT DISTINCT uc.channel_id, uc.user_id
+            SELECT DISTINCT uc.channel_id, uc.user_id, uc.filter_mode
             FROM user_channels uc
             INNER JOIN users u ON uc.user_id = u.id
             WHERE uc.paused = false
@@ -184,12 +187,15 @@ def load_target_channels():
         results = cursor.fetchall()
         target_channels_cache = list(set([row[0] for row in results]))
         channel_user_map = {row[0]: row[1] for row in results}
+        channel_filter_mode = {row[0]: (row[2] or "all") for row in results}
 
         log_info(f"📊 Hedef kanal sayısı: {len(target_channels_cache)}")
         for ch_id in target_channels_cache:
             user_id = channel_user_map.get(ch_id, "?")
-            log_info(f"   - Kanal: {ch_id} (User: {user_id})")
+            filter_mode = channel_filter_mode.get(ch_id, "all")
+            log_info(f"   - Kanal: {ch_id} (User: {user_id}, Filter: {filter_mode})")
 
+        # Admin linkleri çek
         cursor.execute("""
             SELECT user_id, channel_id, link_code, link_url
             FROM admin_links
@@ -204,6 +210,21 @@ def load_target_channels():
             admin_links_cache[key][link_code.lower()] = link_url
 
         log_info(f"🔗 Admin link sayısı: {len(admin_links_cache)}")
+
+        # Kanal filtrelerini çek
+        cursor.execute("""
+            SELECT channel_id, keyword
+            FROM channel_filters
+        """)
+
+        channel_filters = {}
+        for row in cursor.fetchall():
+            channel_id, keyword = row
+            if channel_id not in channel_filters:
+                channel_filters[channel_id] = set()
+            channel_filters[channel_id].add(keyword.lower())
+
+        log_info(f"🔍 Kanal filtresi sayısı: {len(channel_filters)}")
 
         cursor.close()
         conn.close()
@@ -223,6 +244,34 @@ def get_link_for_channel(channel_id: int, code: str, original_link: str) -> str:
             if link_code in code_lower or link_code in link_lower:
                 return link_url
     return original_link
+
+def should_send_to_channel(channel_id: int, code: str, link: str) -> bool:
+    """Koda veya linke göre bu kanala gönderilmeli mi kontrol et"""
+    filter_mode = channel_filter_mode.get(channel_id, "all")
+
+    # Eğer filter_mode "all" ise tüm kodlar gönderilir
+    if filter_mode == "all":
+        return True
+
+    # Eğer filter_mode "filtered" ise sadece belirli kelimeler gönderilir
+    keywords = channel_filters.get(channel_id, set())
+
+    # Eğer hiç keyword tanımlanmamışsa gönderme
+    if not keywords:
+        log_info(f"⚠️ Kanal {channel_id} filtrelenmiş ama keyword yok, gönderilmedi")
+        return False
+
+    # Kod veya linkte keyword var mı kontrol et
+    code_lower = code.lower()
+    link_lower = link.lower()
+
+    for keyword in keywords:
+        if keyword in code_lower or keyword in link_lower:
+            log_info(f"✅ Kanal {channel_id} için '{keyword}' kelimesi bulundu")
+            return True
+
+    log_info(f"⛔ Kanal {channel_id} için eşleşen keyword bulunamadı, gönderilmedi")
+    return False
 
 def maybe_refresh_cache():
     global cache_last_update
@@ -381,10 +430,27 @@ async def send_to_all_channels(code: str, link: str, source_channel: int):
         log_warning(f"HEDEF KANAL YOK! Kod: {code} | Kaynak: {source_name}")
         return
 
-    log_info(f"📤 GÖNDERİM BAŞLIYOR | Kod: {code} | Kaynak: {source_name} | Hedef Kanal Sayısı: {len(target_channels_cache)}")
+    # Filtre kontrolü ile gönderilecek kanalları belirle
+    channels_to_send = []
+    filtered_out = []
+
+    for channel_id in target_channels_cache:
+        if should_send_to_channel(channel_id, code, link):
+            channels_to_send.append(channel_id)
+        else:
+            filtered_out.append(channel_id)
+
+    if filtered_out:
+        log_info(f"🔍 Filtre sonucu: {len(channels_to_send)} kanala gönderilecek, {len(filtered_out)} kanal filtrelendi")
+
+    if not channels_to_send:
+        log_warning(f"Tüm kanallar filtrelendi! Kod: {code} | Kaynak: {source_name}")
+        return
+
+    log_info(f"📤 GÖNDERİM BAŞLIYOR | Kod: {code} | Kaynak: {source_name} | Hedef Kanal Sayısı: {len(channels_to_send)}")
 
     tasks = []
-    for channel_id in target_channels_cache:
+    for channel_id in channels_to_send:
         final_link = get_link_for_channel(channel_id, code, link)
         message = f"`{code}`\n\n{final_link}"
         tasks.append(send_message(channel_id, message, code))
@@ -400,7 +466,7 @@ async def send_to_all_channels(code: str, link: str, source_channel: int):
         else:
             fail_count += 1
 
-    log_info(f"📊 GÖNDERİM TAMAMLANDI | Kod: {code} | Başarılı: {success_count} | Başarısız: {fail_count}")
+    log_info(f"📊 GÖNDERİM TAMAMLANDI | Kod: {code} | Başarılı: {success_count} | Başarısız: {fail_count} | Filtrelenen: {len(filtered_out)}")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # MESAJ İŞLEME
