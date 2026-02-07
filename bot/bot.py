@@ -155,27 +155,28 @@ def has_banned_word(text: str):
 
 import psycopg2
 
-target_channels_cache = []
-admin_links_cache = {}
-channel_user_map = {}
-channel_filter_mode = {}  # channel_id -> "all" veya "filtered"
-channel_filters = {}  # channel_id -> set of keywords
+# Cache yapısı: (user_id, channel_id) tuple bazlı
+user_channel_cache = []  # [(user_id, channel_id), ...]
+admin_links_cache = {}  # (user_id, channel_id) -> {link_code: link_url}
+user_channel_filter_mode = {}  # (user_id, channel_id) -> "all" veya "filtered"
+channel_filters = {}  # channel_id -> set of keywords (şimdilik channel bazlı)
 cache_last_update = 0
-CACHE_TTL = 300
+cache_version = 0  # DB'deki cache version
+CACHE_TTL = 60  # Fallback: 60 saniye (version kontrolü başarısız olursa)
 
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL, connect_timeout=10)
 
 def load_target_channels():
-    global target_channels_cache, channel_user_map, admin_links_cache, channel_filter_mode, channel_filters
+    global user_channel_cache, admin_links_cache, user_channel_filter_mode, channel_filters
 
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Hedef kanalları ve filter_mode bilgisini çek
+        # Hedef user-channel kombinasyonlarını ve filter_mode bilgisini çek
         cursor.execute("""
-            SELECT DISTINCT uc.channel_id, uc.user_id, uc.filter_mode
+            SELECT uc.user_id, uc.channel_id, uc.filter_mode
             FROM user_channels uc
             INNER JOIN users u ON uc.user_id = u.id
             WHERE uc.paused = false
@@ -185,15 +186,17 @@ def load_target_channels():
         """)
 
         results = cursor.fetchall()
-        target_channels_cache = list(set([row[0] for row in results]))
-        channel_user_map = {row[0]: row[1] for row in results}
-        channel_filter_mode = {row[0]: (row[2] or "all") for row in results}
 
-        log_info(f"📊 Hedef kanal sayısı: {len(target_channels_cache)}")
-        for ch_id in target_channels_cache:
-            user_id = channel_user_map.get(ch_id, "?")
-            filter_mode = channel_filter_mode.get(ch_id, "all")
-            log_info(f"   - Kanal: {ch_id} (User: {user_id}, Filter: {filter_mode})")
+        # (user_id, channel_id) tuple listesi
+        user_channel_cache = [(row[0], row[1]) for row in results]
+
+        # (user_id, channel_id) -> filter_mode
+        user_channel_filter_mode = {(row[0], row[1]): (row[2] or "all") for row in results}
+
+        log_info(f"📊 Hedef user-channel sayısı: {len(user_channel_cache)}")
+        for user_id, ch_id in user_channel_cache:
+            filter_mode = user_channel_filter_mode.get((user_id, ch_id), "all")
+            log_info(f"   - User: {user_id} | Kanal: {ch_id} | Filter: {filter_mode}")
 
         # Admin linkleri çek
         cursor.execute("""
@@ -234,22 +237,21 @@ def load_target_channels():
         log_error(f"DB hatası: {e}")
         return False
 
-def get_link_for_channel(channel_id: int, code: str, original_link: str) -> str:
-    user_id = channel_user_map.get(channel_id)
-    if user_id:
-        links = admin_links_cache.get((user_id, channel_id), {})
-        code_lower = code.lower()
-        link_lower = original_link.lower()
-        for link_code, link_url in links.items():
-            if link_code in code_lower or link_code in link_lower:
-                return link_url
+def get_link_for_user_channel(user_id: int, channel_id: int, code: str, original_link: str) -> str:
+    """Kullanıcı-kanal kombinasyonu için özel link getir"""
+    links = admin_links_cache.get((user_id, channel_id), {})
+    code_lower = code.lower()
+    link_lower = original_link.lower()
+    for link_code, link_url in links.items():
+        if link_code in code_lower or link_code in link_lower:
+            return link_url
     return original_link
 
-def should_send_to_channel(channel_id: int, code: str, link: str) -> tuple[bool, str]:
-    """Koda veya linke göre bu kanala gönderilmeli mi kontrol et
+def should_send_to_user_channel(user_id: int, channel_id: int, code: str, link: str) -> tuple[bool, str]:
+    """Kullanıcı-kanal kombinasyonu için gönderilmeli mi kontrol et
     Returns: (should_send, reason)
     """
-    filter_mode = channel_filter_mode.get(channel_id, "all")
+    filter_mode = user_channel_filter_mode.get((user_id, channel_id), "all")
 
     # Eğer filter_mode "all" ise tüm kodlar gönderilir
     if filter_mode == "all":
@@ -272,12 +274,42 @@ def should_send_to_channel(channel_id: int, code: str, link: str) -> tuple[bool,
 
     return False, "no_match"
 
+def check_cache_version() -> bool:
+    """DB'deki cache_version değişmiş mi kontrol et"""
+    global cache_version
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT version FROM cache_version WHERE id = 1")
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if row:
+            db_version = row[0]
+            if db_version != cache_version:
+                cache_version = db_version
+                return True  # Değişmiş, yenileme gerekli
+        return False
+    except Exception as e:
+        log_warning(f"Cache version kontrol hatası: {e}")
+        return False
+
 def maybe_refresh_cache():
     global cache_last_update
     now = time.time()
+
+    # Önce cache_version tablosunu kontrol et (anlık algılama)
+    if check_cache_version():
+        cache_last_update = now
+        log_info("🔄 Cache yenileniyor (version değişti)...")
+        load_target_channels()
+        return
+
+    # Fallback: Zaman bazlı kontrol (version kontrolü başarısız olursa)
     if now - cache_last_update > CACHE_TTL:
         cache_last_update = now
-        log_info("🔄 Cache yenileniyor...")
+        log_info("🔄 Cache yenileniyor (TTL)...")
         load_target_channels()
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -425,31 +457,39 @@ async def send_message(chat_id: int, text: str, code: str) -> dict:
 async def send_to_all_channels(code: str, link: str, source_channel: int):
     source_name = CHANNEL_NAMES.get(source_channel, str(source_channel))
 
-    if not target_channels_cache:
+    if not user_channel_cache:
         log_warning(f"HEDEF KANAL YOK! Kod: {code} | Kaynak: {source_name}")
         return
 
-    # Filtre kontrolü ile gönderilecek kanalları belirle (sessiz)
-    channels_to_send = []
+    # Filtre kontrolü ile gönderilecek user-channel kombinasyonlarını belirle
+    user_channels_to_send = []
     filtered_out_count = 0
 
-    for channel_id in target_channels_cache:
-        should_send, _ = should_send_to_channel(channel_id, code, link)
+    # Aynı kanala birden fazla kez gönderilmemesi için kanal bazlı takip
+    sent_channels = set()
+
+    for user_id, channel_id in user_channel_cache:
+        # Aynı kanala zaten gönderilmişse atla (ilk user'ın ayarları geçerli)
+        if channel_id in sent_channels:
+            continue
+
+        should_send, reason = should_send_to_user_channel(user_id, channel_id, code, link)
         if should_send:
-            channels_to_send.append(channel_id)
+            user_channels_to_send.append((user_id, channel_id))
+            sent_channels.add(channel_id)
         else:
             filtered_out_count += 1
 
-    if not channels_to_send:
+    if not user_channels_to_send:
         log_info(f"⛔ Tüm kanallar filtrelendi ({filtered_out_count}) | Kod: {code} | Kaynak: {source_name}")
         return
 
     # Sadece özet bilgi logla
-    log_info(f"📤 GÖNDERİM | Kod: {code} | Kaynak: {source_name} | Hedef: {len(channels_to_send)} kanal (filtrelenen: {filtered_out_count})")
+    log_info(f"📤 GÖNDERİM | Kod: {code} | Kaynak: {source_name} | Hedef: {len(user_channels_to_send)} kanal (filtrelenen: {filtered_out_count})")
 
     tasks = []
-    for channel_id in channels_to_send:
-        final_link = get_link_for_channel(channel_id, code, link)
+    for user_id, channel_id in user_channels_to_send:
+        final_link = get_link_for_user_channel(user_id, channel_id, code, link)
         message = f"`{code}`\n\n{final_link}"
         tasks.append(send_message(channel_id, message, code))
 
@@ -589,7 +629,7 @@ async def keep_alive():
         except Exception as e:
             log_warning(f"Keep-alive hatası: {e}")
 
-        await asyncio.sleep(60)
+        await asyncio.sleep(10)  # 10 saniyede bir cache kontrolü (version-based)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # BAŞLANGIÇ
@@ -605,13 +645,16 @@ async def main():
         log_success("Telegram client bağlandı")
 
         await check_channel_access()
+
+        # İlk cache_version'ı yükle
+        check_cache_version()
         load_target_channels()
         setup_handler()
 
         log_info("=" * 60)
         log_info("✅ BOT HAZIR - DİNLEME BAŞLADI")
         log_info(f"📡 Dinlenen kaynak kanal: {len(channel_entities)}")
-        log_info(f"📤 Hedef kanal sayısı: {len(target_channels_cache)}")
+        log_info(f"📤 Hedef user-channel sayısı: {len(user_channel_cache)}")
         log_info("=" * 60)
 
         asyncio.create_task(keep_alive())
