@@ -5,7 +5,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Radio, AlertTriangle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Radio, AlertTriangle, Filter, Plus, X, Settings2, Check } from "lucide-react";
 
 interface Channel {
   channelId: string;
@@ -21,7 +30,15 @@ interface UserChannel {
   userId: number;
   channelId: string;
   paused: boolean;
+  filterMode: string;
   channel: Channel;
+}
+
+interface ChannelFilter {
+  id: number;
+  channelId: string;
+  keyword: string;
+  createdAt: string;
 }
 
 interface UserInfo {
@@ -31,9 +48,13 @@ interface UserInfo {
 
 export default function DashboardPage() {
   const [userChannels, setUserChannels] = useState<UserChannel[]>([]);
+  const [channelFilters, setChannelFilters] = useState<ChannelFilter[]>([]);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [selectedChannel, setSelectedChannel] = useState<UserChannel | null>(null);
+  const [newKeyword, setNewKeyword] = useState("");
+  const [addingKeyword, setAddingKeyword] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -41,9 +62,10 @@ export default function DashboardPage() {
 
   const fetchData = async () => {
     try {
-      const [channelsRes, userRes] = await Promise.all([
+      const [channelsRes, userRes, filtersRes] = await Promise.all([
         fetch("/api/user-channels"),
-        fetch("/api/auth/me")
+        fetch("/api/auth/me"),
+        fetch("/api/channel-filters"),
       ]);
 
       if (channelsRes.ok) {
@@ -55,6 +77,11 @@ export default function DashboardPage() {
         const userData = await userRes.json();
         setUserInfo(userData.user || userData);
       }
+
+      if (filtersRes.ok) {
+        const filtersData = await filtersRes.json();
+        setChannelFilters(filtersData);
+      }
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -63,7 +90,6 @@ export default function DashboardPage() {
   };
 
   const togglePause = async (channelId: string, currentPaused: boolean) => {
-    // Bot kapaliysa aktifleştirme yapilamaz
     if (!userInfo?.botEnabled && currentPaused) {
       alert("Bot yonetici tarafindan durdurulmus. Kanallari aktiflestiremezsiniz.");
       return;
@@ -95,6 +121,75 @@ export default function DashboardPage() {
     } finally {
       setUpdating(null);
     }
+  };
+
+  const toggleFilterMode = async (channelId: string, currentMode: string) => {
+    const newMode = currentMode === "all" ? "filtered" : "all";
+
+    try {
+      const response = await fetch("/api/channel-filters", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channelId,
+          filterMode: newMode,
+        }),
+      });
+
+      if (response.ok) {
+        setUserChannels((prev) =>
+          prev.map((uc) =>
+            uc.channelId === channelId ? { ...uc, filterMode: newMode } : uc
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Error toggling filter mode:", error);
+    }
+  };
+
+  const addKeyword = async () => {
+    if (!selectedChannel || !newKeyword.trim()) return;
+
+    setAddingKeyword(true);
+    try {
+      const response = await fetch("/api/channel-filters", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channelId: selectedChannel.channelId,
+          keyword: newKeyword.trim(),
+        }),
+      });
+
+      if (response.ok) {
+        const newFilter = await response.json();
+        setChannelFilters((prev) => [...prev, newFilter]);
+        setNewKeyword("");
+      }
+    } catch (error) {
+      console.error("Error adding keyword:", error);
+    } finally {
+      setAddingKeyword(false);
+    }
+  };
+
+  const deleteKeyword = async (id: number) => {
+    try {
+      const response = await fetch(`/api/channel-filters?id=${id}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        setChannelFilters((prev) => prev.filter((f) => f.id !== id));
+      }
+    } catch (error) {
+      console.error("Error deleting keyword:", error);
+    }
+  };
+
+  const getFiltersForChannel = (channelId: string) => {
+    return channelFilters.filter((f) => f.channelId === channelId);
   };
 
   const activeChannels = userChannels.filter((uc) => !uc.paused).length;
@@ -194,50 +289,188 @@ export default function DashboardPage() {
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {userChannels.map((uc) => {
                 const isUpdating = updating === uc.channelId;
                 const canToggle = userInfo?.botEnabled || !uc.paused;
+                const filters = getFiltersForChannel(uc.channelId);
 
                 return (
                   <div
                     key={uc.id}
-                    className="flex items-center justify-between rounded-lg border border-slate-700/50 bg-slate-800/50 p-4"
+                    className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-4 space-y-4"
                   >
-                    <div className="flex items-center gap-3">
-                      {uc.channel.channelPhoto ? (
-                        <img
-                          src={uc.channel.channelPhoto}
-                          alt={uc.channel.channelName || "Kanal"}
-                          className="h-10 w-10 rounded-lg object-cover border border-slate-700"
-                        />
-                      ) : (
-                        <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${uc.paused ? "bg-red-500/20 text-red-400" : "bg-blue-500/20 text-blue-400"}`}>
-                          <Radio className="h-5 w-5" />
+                    {/* Channel Info Row */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {uc.channel.channelPhoto ? (
+                          <img
+                            src={uc.channel.channelPhoto}
+                            alt={uc.channel.channelName || "Kanal"}
+                            className="h-10 w-10 rounded-lg object-cover border border-slate-700"
+                          />
+                        ) : (
+                          <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${uc.paused ? "bg-red-500/20 text-red-400" : "bg-blue-500/20 text-blue-400"}`}>
+                            <Radio className="h-5 w-5" />
+                          </div>
+                        )}
+                        <div>
+                          <p className="font-medium text-white">
+                            {uc.channel.channelName || `Kanal ${uc.channelId}`}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {uc.channel.channelUsername ? `@${uc.channel.channelUsername}` : `ID: ${uc.channelId}`}
+                          </p>
                         </div>
-                      )}
-                      <div>
-                        <p className="font-medium text-white">
-                          {uc.channel.channelName || `Kanal ${uc.channelId}`}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {uc.channel.channelUsername ? `@${uc.channel.channelUsername}` : `ID: ${uc.channelId}`}
-                        </p>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <Badge
+                          variant={uc.paused ? "destructive" : "default"}
+                          className={uc.paused ? "bg-red-500/20 text-red-400 border border-red-500/30" : "bg-blue-600 hover:bg-blue-700"}
+                        >
+                          {uc.paused ? "Durduruldu" : "Aktif"}
+                        </Badge>
+                        <Switch
+                          checked={!uc.paused}
+                          onCheckedChange={() => togglePause(uc.channelId, uc.paused)}
+                          disabled={isUpdating || !canToggle}
+                          className="data-[state=checked]:bg-blue-600"
+                        />
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <Badge
-                        variant={uc.paused ? "destructive" : "default"}
-                        className={uc.paused ? "bg-red-500/20 text-red-400 border border-red-500/30" : "bg-blue-600 hover:bg-blue-700"}
-                      >
-                        {uc.paused ? "Durduruldu" : "Aktif"}
-                      </Badge>
-                      <Switch
-                        checked={!uc.paused}
-                        onCheckedChange={() => togglePause(uc.channelId, uc.paused)}
-                        disabled={isUpdating || !canToggle}
-                        className="data-[state=checked]:bg-blue-600"
-                      />
+
+                    {/* Filter Settings Row */}
+                    <div className="border-t border-slate-700/50 pt-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <Filter className="h-4 w-4 text-slate-400" />
+                          <span className="text-sm text-slate-400">Kod Filtresi:</span>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant={uc.filterMode === "all" ? "default" : "outline"}
+                              onClick={() => toggleFilterMode(uc.channelId, uc.filterMode)}
+                              className={uc.filterMode === "all"
+                                ? "bg-green-600 hover:bg-green-700 text-white"
+                                : "border-slate-600 text-slate-400 hover:bg-slate-700"}
+                            >
+                              {uc.filterMode === "all" && <Check className="h-3 w-3 mr-1" />}
+                              Tum Kodlar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={uc.filterMode === "filtered" ? "default" : "outline"}
+                              onClick={() => toggleFilterMode(uc.channelId, uc.filterMode)}
+                              className={uc.filterMode === "filtered"
+                                ? "bg-orange-600 hover:bg-orange-700 text-white"
+                                : "border-slate-600 text-slate-400 hover:bg-slate-700"}
+                            >
+                              {uc.filterMode === "filtered" && <Check className="h-3 w-3 mr-1" />}
+                              Belirli Kodlar
+                            </Button>
+                          </div>
+                        </div>
+
+                        {uc.filterMode === "filtered" && (
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-slate-600 text-slate-300 hover:bg-slate-700"
+                                onClick={() => setSelectedChannel(uc)}
+                              >
+                                <Settings2 className="h-4 w-4 mr-2" />
+                                Kelimeleri Yonet ({filters.length})
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="border-slate-700 bg-slate-900">
+                              <DialogHeader>
+                                <DialogTitle className="text-white flex items-center gap-2">
+                                  <Filter className="h-5 w-5 text-orange-400" />
+                                  Filtre Kelimeleri - {uc.channel.channelName || `Kanal ${uc.channelId}`}
+                                </DialogTitle>
+                              </DialogHeader>
+                              <div className="space-y-4 pt-4">
+                                <p className="text-sm text-slate-400">
+                                  Sadece asagidaki kelimeleri iceren kodlar bu kanala gonderilir.
+                                </p>
+
+                                {/* Add new keyword */}
+                                <div className="flex gap-2">
+                                  <Input
+                                    placeholder="Yeni kelime ekle..."
+                                    value={newKeyword}
+                                    onChange={(e) => setNewKeyword(e.target.value)}
+                                    onKeyDown={(e) => e.key === "Enter" && addKeyword()}
+                                    className="bg-slate-800 border-slate-700 text-white"
+                                  />
+                                  <Button
+                                    onClick={addKeyword}
+                                    disabled={addingKeyword || !newKeyword.trim()}
+                                    className="bg-orange-600 hover:bg-orange-700"
+                                  >
+                                    <Plus className="h-4 w-4" />
+                                  </Button>
+                                </div>
+
+                                {/* Keywords list */}
+                                <div className="space-y-2 max-h-60 overflow-y-auto">
+                                  {filters.length === 0 ? (
+                                    <p className="text-center text-slate-500 py-4">
+                                      Henuz kelime eklenmemis. Kelime ekleyin.
+                                    </p>
+                                  ) : (
+                                    filters.map((filter) => (
+                                      <div
+                                        key={filter.id}
+                                        className="flex items-center justify-between rounded-lg bg-slate-800 px-3 py-2"
+                                      >
+                                        <Badge className="bg-orange-600/20 text-orange-400 border-orange-500/30">
+                                          {filter.keyword}
+                                        </Badge>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 w-7 p-0 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                                          onClick={() => deleteKeyword(filter.id)}
+                                        >
+                                          <X className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        )}
+                      </div>
+
+                      {/* Show current filters inline */}
+                      {uc.filterMode === "filtered" && filters.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          {filters.slice(0, 5).map((filter) => (
+                            <Badge
+                              key={filter.id}
+                              className="bg-orange-600/20 text-orange-400 border-orange-500/30"
+                            >
+                              {filter.keyword}
+                            </Badge>
+                          ))}
+                          {filters.length > 5 && (
+                            <Badge className="bg-slate-700 text-slate-400">
+                              +{filters.length - 5} daha
+                            </Badge>
+                          )}
+                        </div>
+                      )}
+
+                      {uc.filterMode === "filtered" && filters.length === 0 && (
+                        <p className="text-xs text-orange-400 mt-2">
+                          Uyari: Filtre aktif ama kelime eklenmemis. Hicbir kod gonderilmeyecek!
+                        </p>
+                      )}
                     </div>
                   </div>
                 );
