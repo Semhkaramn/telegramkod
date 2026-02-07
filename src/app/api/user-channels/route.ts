@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
+    const refresh = searchParams.get("refresh") === "true";
 
     // Superadmin tüm kullanıcıların kanallarını görebilir
     // Normal kullanıcı sadece kendi kanallarını görebilir
@@ -85,9 +86,6 @@ export async function GET(request: NextRequest) {
     }));
 
     // Issue #19: Kanal bilgilerini güncelle
-    const { searchParams } = new URL(request.url);
-    const refresh = searchParams.get("refresh") === "true";
-
     if (refresh && userChannels.length > 0) {
       // refresh=true ise bekle, güncel veri dönsün (cache'i atla)
       const channelIds = userChannels.map((uc) => uc.channel.channelId);
