@@ -126,15 +126,19 @@ export async function POST(request: NextRequest) {
     });
 
     if (existingChannel) {
-      // Güncelle
+      // Güncelle - Telegram'dan bilgi alındıysa HER ZAMAN güncelle (null olsa bile)
+      // Bu, expire olmuş foto URL'lerinin temizlenmesini sağlar
       await prisma.channel.update({
         where: { channelId: finalChannelId },
         data: {
-          channelName: finalChannelName || existingChannel.channelName,
-          channelUsername: channelUsername || existingChannel.channelUsername,
-          channelPhoto: channelPhoto || existingChannel.channelPhoto,
-          memberCount: memberCount || existingChannel.memberCount,
-          description: description || existingChannel.description,
+          // Telegram bilgisi varsa onu kullan, yoksa mevcut değeri koru
+          channelName: telegramInfo ? finalChannelName : (finalChannelName || existingChannel.channelName),
+          channelUsername: telegramInfo ? channelUsername : (channelUsername || existingChannel.channelUsername),
+          // Fotoğraf için: Telegram bilgisi varsa MUTLAKA güncelle (null bile olsa)
+          // Bu sayede expire olmuş URL'ler temizlenir
+          channelPhoto: telegramInfo ? channelPhoto : existingChannel.channelPhoto,
+          memberCount: telegramInfo ? memberCount : (memberCount || existingChannel.memberCount),
+          description: telegramInfo ? description : (description || existingChannel.description),
           lastUpdated: new Date(),
         },
       });
