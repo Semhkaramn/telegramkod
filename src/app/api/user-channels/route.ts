@@ -84,11 +84,45 @@ export async function GET(request: NextRequest) {
       },
     }));
 
-    // Issue #19: Arka planda kanal bilgilerini güncelle (site her yüklendiğinde)
-    // Bu işlem bloklama yapmaz, response hemen döner
-    if (userChannels.length > 0) {
+    // Issue #19: Kanal bilgilerini güncelle
+    const { searchParams } = new URL(request.url);
+    const refresh = searchParams.get("refresh") === "true";
+
+    if (refresh && userChannels.length > 0) {
+      // refresh=true ise bekle, güncel veri dönsün (cache'i atla)
       const channelIds = userChannels.map((uc) => uc.channel.channelId);
-      // Arka planda çalıştır - await yok, response'ı bekletmez
+      try {
+        await refreshChannelsInBackground(channelIds, true); // forceRefresh = true
+
+        // Güncellenmiş veriyi tekrar çek
+        const updatedUserChannels = await prisma.userChannel.findMany({
+          where: { userId: targetUserId },
+          include: { channel: true },
+        }) as UserChannelWithChannel[];
+
+        const updatedSerialized = updatedUserChannels.map((uc: UserChannelWithChannel & { filterMode?: string }) => ({
+          id: uc.id,
+          userId: uc.userId,
+          channelId: uc.channelId.toString(),
+          paused: uc.paused,
+          filterMode: uc.filterMode || "all",
+          channel: {
+            channelId: uc.channel.channelId.toString(),
+            channelName: uc.channel.channelName,
+            channelUsername: uc.channel.channelUsername ?? null,
+            channelPhoto: uc.channel.channelPhoto ?? null,
+            memberCount: uc.channel.memberCount ?? null,
+            isJoined: uc.channel.isJoined,
+          },
+        }));
+
+        return NextResponse.json(updatedSerialized);
+      } catch (err) {
+        console.error("Channel refresh error:", err);
+      }
+    } else if (userChannels.length > 0) {
+      // refresh=false ise arka planda çalıştır, eski veriyi hemen dön
+      const channelIds = userChannels.map((uc) => uc.channel.channelId);
       refreshChannelsInBackground(channelIds).catch((err) => {
         console.error("Background channel refresh error:", err);
       });
