@@ -91,3 +91,13 @@ model ChannelFilter {
   @@unique([channelId, keyword])
   @@map("channel_filters")
 }
+
+// Cache Version (Bot ile website arasında senkronizasyon için)
+// Bot bu tabloyu izleyerek cache'i yeniler
+model CacheVersion {
+  id        Int      @id @default(1)
+  version   Int      @default(1)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("cache_version")
+}
