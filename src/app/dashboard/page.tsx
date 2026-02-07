@@ -45,7 +45,6 @@ interface UserInfo {
   isBanned: boolean;
 }
 
-// Dialog state interface for managing each channel's dialog independently
 interface DialogState {
   isOpen: boolean;
   channelId: string | null;
@@ -61,7 +60,6 @@ export default function DashboardPage() {
   const [updating, setUpdating] = useState<string | null>(null);
   const [addingKeyword, setAddingKeyword] = useState(false);
 
-  // Fixed: Use a single dialog state object instead of shared state
   const [dialogState, setDialogState] = useState<DialogState>({
     isOpen: false,
     channelId: null,
@@ -104,7 +102,7 @@ export default function DashboardPage() {
 
   const togglePause = async (channelId: string, currentPaused: boolean) => {
     if (!userInfo?.botEnabled && currentPaused) {
-      alert("Bot yonetici tarafindan durdurulmus. Kanallari aktiflestiremezsiniz.");
+      alert("Bot yonetici tarafindan durdurulmus.");
       return;
     }
 
@@ -113,10 +111,7 @@ export default function DashboardPage() {
       const response = await fetch("/api/user-channels", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          channelId,
-          paused: !currentPaused,
-        }),
+        body: JSON.stringify({ channelId, paused: !currentPaused }),
       });
 
       if (response.ok) {
@@ -127,10 +122,10 @@ export default function DashboardPage() {
         );
       } else {
         const data = await response.json();
-        alert(data.error || "Bir hata olustu");
+        alert(data.error || "Hata olustu");
       }
     } catch (error) {
-      console.error("Error toggling pause:", error);
+      console.error("Error:", error);
     } finally {
       setUpdating(null);
     }
@@ -138,15 +133,11 @@ export default function DashboardPage() {
 
   const toggleFilterMode = async (channelId: string, currentMode: string) => {
     const newMode = currentMode === "all" ? "filtered" : "all";
-
     try {
       const response = await fetch("/api/channel-filters", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          channelId,
-          filterMode: newMode,
-        }),
+        body: JSON.stringify({ channelId, filterMode: newMode }),
       });
 
       if (response.ok) {
@@ -157,11 +148,10 @@ export default function DashboardPage() {
         );
       }
     } catch (error) {
-      console.error("Error toggling filter mode:", error);
+      console.error("Error:", error);
     }
   };
 
-  // Fixed: Open dialog with specific channel data
   const openKeywordDialog = (uc: UserChannel) => {
     setDialogState({
       isOpen: true,
@@ -171,22 +161,14 @@ export default function DashboardPage() {
     });
   };
 
-  // Fixed: Close dialog and reset state
   const closeKeywordDialog = () => {
-    setDialogState({
-      isOpen: false,
-      channelId: null,
-      channelName: null,
-      newKeyword: "",
-    });
+    setDialogState({ isOpen: false, channelId: null, channelName: null, newKeyword: "" });
   };
 
-  // Fixed: Update keyword input for the current dialog
   const updateDialogKeyword = (keyword: string) => {
     setDialogState((prev) => ({ ...prev, newKeyword: keyword }));
   };
 
-  // Fixed: Add keyword using dialog state instead of shared state
   const addKeyword = async () => {
     if (!dialogState.channelId || !dialogState.newKeyword.trim()) return;
 
@@ -204,11 +186,10 @@ export default function DashboardPage() {
       if (response.ok) {
         const newFilter = await response.json();
         setChannelFilters((prev) => [...prev, newFilter]);
-        // Clear only the keyword input, keep dialog open
         setDialogState((prev) => ({ ...prev, newKeyword: "" }));
       }
     } catch (error) {
-      console.error("Error adding keyword:", error);
+      console.error("Error:", error);
     } finally {
       setAddingKeyword(false);
     }
@@ -216,15 +197,12 @@ export default function DashboardPage() {
 
   const deleteKeyword = async (id: number) => {
     try {
-      const response = await fetch(`/api/channel-filters?id=${id}`, {
-        method: "DELETE",
-      });
-
+      const response = await fetch(`/api/channel-filters?id=${id}`, { method: "DELETE" });
       if (response.ok) {
         setChannelFilters((prev) => prev.filter((f) => f.id !== id));
       }
     } catch (error) {
-      console.error("Error deleting keyword:", error);
+      console.error("Error:", error);
     }
   };
 
@@ -234,226 +212,185 @@ export default function DashboardPage() {
 
   const activeChannels = userChannels.filter((uc) => !uc.paused).length;
   const pausedChannels = userChannels.filter((uc) => uc.paused).length;
-
-  // Get filters for the currently open dialog
-  const dialogFilters = dialogState.channelId
-    ? getFiltersForChannel(dialogState.channelId)
-    : [];
+  const dialogFilters = dialogState.channelId ? getFiltersForChannel(dialogState.channelId) : [];
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-32 bg-slate-800" />
+      <div className="space-y-3">
+        <div className="grid gap-2 grid-cols-3">
+          {[...Array(3)].map((_, i) => (
+            <Skeleton key={i} className="h-16 bg-slate-800" />
           ))}
         </div>
-        <Skeleton className="h-64 bg-slate-800" />
+        <Skeleton className="h-40 bg-slate-800" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-slate-400">Hos geldiniz! Kanallarinizi buradan yonetin.</p>
+    <div className="space-y-3">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-bold text-white">Dashboard</h1>
+        <Badge variant="outline" className="text-xs border-slate-600 text-slate-400">
+          {userChannels.length} kanal
+        </Badge>
       </div>
 
       {/* Bot Disabled Warning */}
       {userInfo && !userInfo.botEnabled && (
-        <Card className="border-orange-500/30 bg-orange-500/10">
-          <CardContent className="flex items-center gap-3 py-4">
-            <AlertTriangle className="h-5 w-5 text-orange-400" />
-            <div>
-              <p className="font-medium text-orange-400">Bot Durduruldu</p>
-              <p className="text-sm text-orange-300/80">
-                Yonetici tarafindan botunuz durdurulmustur. Kanallariniza kod gonderilmeyecek ve kanallari aktiflestiremezsiniz.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="flex items-center gap-2 p-2 rounded-lg border border-orange-500/30 bg-orange-500/10 text-xs">
+          <AlertTriangle className="h-3.5 w-3.5 text-orange-400 shrink-0" />
+          <span className="text-orange-300">Bot durduruldu - kod gonderilmiyor</span>
+        </div>
       )}
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="border-slate-700/50 bg-slate-900/50 backdrop-blur-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">
-              Toplam Kanal
-            </CardTitle>
+      {/* Stats Cards - Compact */}
+      <div className="grid gap-2 grid-cols-3">
+        <Card className="border-slate-700/50 bg-slate-900/50 p-2.5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase">Toplam</p>
+              <p className="text-lg font-bold text-white">{userChannels.length}</p>
+            </div>
             <Radio className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-white">{userChannels.length}</div>
-            <p className="text-xs text-slate-500">
-              {activeChannels} aktif, {pausedChannels} durdurulmus
-            </p>
-          </CardContent>
+          </div>
         </Card>
 
-        <Card className="border-slate-700/50 bg-slate-900/50 backdrop-blur-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">
-              Aktif Kanallar
-            </CardTitle>
+        <Card className="border-slate-700/50 bg-slate-900/50 p-2.5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase">Aktif</p>
+              <p className="text-lg font-bold text-green-400">{activeChannels}</p>
+            </div>
             <Radio className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-white">{activeChannels}</div>
-            <p className="text-xs text-slate-500">kanal aktif durumda</p>
-          </CardContent>
+          </div>
         </Card>
 
-        <Card className="border-slate-700/50 bg-slate-900/50 backdrop-blur-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">
-              Duraklatilmis
-            </CardTitle>
+        <Card className="border-slate-700/50 bg-slate-900/50 p-2.5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase">Durdu</p>
+              <p className="text-lg font-bold text-red-400">{pausedChannels}</p>
+            </div>
             <Radio className="h-4 w-4 text-red-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-white">{pausedChannels}</div>
-            <p className="text-xs text-slate-500">kanal durdurulmus</p>
-          </CardContent>
+          </div>
         </Card>
       </div>
 
-      {/* Channels List with Toggle */}
-      <Card className="border-slate-700/50 bg-slate-900/50 backdrop-blur-sm">
-        <CardHeader>
-          <CardTitle className="text-white">Kanallariniz</CardTitle>
+      {/* Channels List */}
+      <Card className="border-slate-700/50 bg-slate-900/50">
+        <CardHeader className="py-2.5 px-3">
+          <CardTitle className="text-sm text-white">Kanallar</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {userChannels.length === 0 ? (
-            <div className="text-center py-8">
-              <Radio className="mx-auto h-12 w-12 text-slate-600" />
-              <p className="mt-4 text-slate-400">Henuz atanmis kanaliniz yok.</p>
-              <p className="text-sm text-slate-500">
-                Super admin tarafindan kanal atanmasi gerekiyor.
-              </p>
+            <div className="text-center py-6 px-3">
+              <Radio className="mx-auto h-8 w-8 text-slate-600" />
+              <p className="mt-2 text-xs text-slate-400">Henuz kanal yok</p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="divide-y divide-slate-700/50">
               {userChannels.map((uc) => {
                 const isUpdating = updating === uc.channelId;
                 const canToggle = userInfo?.botEnabled || !uc.paused;
                 const filters = getFiltersForChannel(uc.channelId);
 
                 return (
-                  <div
-                    key={uc.id}
-                    className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-4 space-y-4"
-                  >
-                    {/* Channel Info Row */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
+                  <div key={uc.id} className="p-2.5 space-y-2">
+                    {/* Channel Row */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
                         {uc.channel.channelPhoto ? (
                           <img
                             src={uc.channel.channelPhoto}
-                            alt={uc.channel.channelName || "Kanal"}
-                            className="h-10 w-10 rounded-lg object-cover border border-slate-700"
+                            alt=""
+                            className="h-7 w-7 rounded-md object-cover border border-slate-700 shrink-0"
                           />
                         ) : (
-                          <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${uc.paused ? "bg-red-500/20 text-red-400" : "bg-blue-500/20 text-blue-400"}`}>
-                            <Radio className="h-5 w-5" />
+                          <div className={`h-7 w-7 rounded-md flex items-center justify-center shrink-0 ${uc.paused ? "bg-red-500/20" : "bg-blue-500/20"}`}>
+                            <Radio className={`h-3.5 w-3.5 ${uc.paused ? "text-red-400" : "text-blue-400"}`} />
                           </div>
                         )}
-                        <div>
-                          <p className="font-medium text-white">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-medium text-white truncate">
                             {uc.channel.channelName || `Kanal ${uc.channelId}`}
                           </p>
-                          <p className="text-xs text-slate-500">
+                          <p className="text-[10px] text-slate-500 truncate">
                             {uc.channel.channelUsername ? `@${uc.channel.channelUsername}` : `ID: ${uc.channelId}`}
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2 shrink-0">
                         <Badge
-                          variant={uc.paused ? "destructive" : "default"}
-                          className={uc.paused ? "bg-red-500/20 text-red-400 border border-red-500/30" : "bg-blue-600 hover:bg-blue-700"}
+                          className={`text-[10px] px-1.5 py-0 ${uc.paused ? "bg-red-500/20 text-red-400 border-red-500/30" : "bg-green-500/20 text-green-400 border-green-500/30"}`}
                         >
-                          {uc.paused ? "Durduruldu" : "Aktif"}
+                          {uc.paused ? "Durdu" : "Aktif"}
                         </Badge>
                         <Switch
                           checked={!uc.paused}
                           onCheckedChange={() => togglePause(uc.channelId, uc.paused)}
                           disabled={isUpdating || !canToggle}
-                          className="data-[state=checked]:bg-blue-600"
+                          className="scale-75 data-[state=checked]:bg-green-600"
                         />
                       </div>
                     </div>
 
-                    {/* Filter Settings Row */}
-                    <div className="border-t border-slate-700/50 pt-4">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <Filter className="h-4 w-4 text-slate-400" />
-                          <span className="text-sm text-slate-400">Kod Filtresi:</span>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant={uc.filterMode === "all" ? "default" : "outline"}
-                              onClick={() => toggleFilterMode(uc.channelId, uc.filterMode)}
-                              className={uc.filterMode === "all"
-                                ? "bg-green-600 hover:bg-green-700 text-white"
-                                : "border-slate-600 text-slate-400 hover:bg-slate-700"}
-                            >
-                              {uc.filterMode === "all" && <Check className="h-3 w-3 mr-1" />}
-                              Tum Kodlar
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant={uc.filterMode === "filtered" ? "default" : "outline"}
-                              onClick={() => toggleFilterMode(uc.channelId, uc.filterMode)}
-                              className={uc.filterMode === "filtered"
-                                ? "bg-orange-600 hover:bg-orange-700 text-white"
-                                : "border-slate-600 text-slate-400 hover:bg-slate-700"}
-                            >
-                              {uc.filterMode === "filtered" && <Check className="h-3 w-3 mr-1" />}
-                              Belirli Kodlar
-                            </Button>
-                          </div>
-                        </div>
-
-                        {uc.filterMode === "filtered" && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="border-slate-600 text-slate-300 hover:bg-slate-700"
-                            onClick={() => openKeywordDialog(uc)}
-                          >
-                            <Settings2 className="h-4 w-4 mr-2" />
-                            Kelimeleri Yonet ({filters.length})
-                          </Button>
-                        )}
+                    {/* Filter Row - Compact */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <div className="flex gap-1">
+                        <Button
+                          size="sm"
+                          variant={uc.filterMode === "all" ? "default" : "outline"}
+                          onClick={() => toggleFilterMode(uc.channelId, uc.filterMode)}
+                          className={`h-6 px-2 text-[10px] ${uc.filterMode === "all" ? "bg-green-600 hover:bg-green-700" : "border-slate-600 text-slate-400"}`}
+                        >
+                          {uc.filterMode === "all" && <Check className="h-2.5 w-2.5 mr-0.5" />}
+                          Tum
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={uc.filterMode === "filtered" ? "default" : "outline"}
+                          onClick={() => toggleFilterMode(uc.channelId, uc.filterMode)}
+                          className={`h-6 px-2 text-[10px] ${uc.filterMode === "filtered" ? "bg-orange-600 hover:bg-orange-700" : "border-slate-600 text-slate-400"}`}
+                        >
+                          {uc.filterMode === "filtered" && <Check className="h-2.5 w-2.5 mr-0.5" />}
+                          Filtreli
+                        </Button>
                       </div>
 
-                      {/* Show current filters inline */}
-                      {uc.filterMode === "filtered" && filters.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mt-3">
-                          {filters.slice(0, 5).map((filter) => (
-                            <Badge
-                              key={filter.id}
-                              className="bg-orange-600/20 text-orange-400 border-orange-500/30"
-                            >
-                              {filter.keyword}
-                            </Badge>
-                          ))}
-                          {filters.length > 5 && (
-                            <Badge className="bg-slate-700 text-slate-400">
-                              +{filters.length - 5} daha
-                            </Badge>
-                          )}
-                        </div>
-                      )}
-
-                      {uc.filterMode === "filtered" && filters.length === 0 && (
-                        <p className="text-xs text-orange-400 mt-2">
-                          Uyari: Filtre aktif ama kelime eklenmemis. Hicbir kod gonderilmeyecek!
-                        </p>
+                      {uc.filterMode === "filtered" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => openKeywordDialog(uc)}
+                          className="h-6 px-2 text-[10px] text-slate-400 hover:text-white"
+                        >
+                          <Settings2 className="h-3 w-3 mr-1" />
+                          {filters.length} kelime
+                        </Button>
                       )}
                     </div>
+
+                    {/* Inline Keywords */}
+                    {uc.filterMode === "filtered" && filters.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {filters.slice(0, 4).map((filter) => (
+                          <Badge key={filter.id} className="text-[10px] px-1.5 py-0 bg-orange-600/20 text-orange-400 border-orange-500/30">
+                            {filter.keyword}
+                          </Badge>
+                        ))}
+                        {filters.length > 4 && (
+                          <Badge className="text-[10px] px-1.5 py-0 bg-slate-700 text-slate-400">
+                            +{filters.length - 4}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+
+                    {uc.filterMode === "filtered" && filters.length === 0 && (
+                      <p className="text-[10px] text-orange-400">Kelime ekleyin!</p>
+                    )}
                   </div>
                 );
               })}
@@ -462,60 +399,49 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Fixed: Single controlled dialog for managing keywords */}
+      {/* Keyword Dialog */}
       <Dialog open={dialogState.isOpen} onOpenChange={(open) => !open && closeKeywordDialog()}>
-        <DialogContent className="border-slate-700 bg-slate-900">
+        <DialogContent className="border-slate-700 bg-slate-900 max-w-sm">
           <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2">
-              <Filter className="h-5 w-5 text-orange-400" />
-              Filtre Kelimeleri - {dialogState.channelName}
+            <DialogTitle className="text-sm text-white flex items-center gap-1.5">
+              <Filter className="h-4 w-4 text-orange-400" />
+              {dialogState.channelName}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 pt-4">
-            <p className="text-sm text-slate-400">
-              Sadece asagidaki kelimeleri iceren kodlar bu kanala gonderilir.
-            </p>
-
-            {/* Add new keyword */}
-            <div className="flex gap-2">
+          <div className="space-y-3">
+            <div className="flex gap-1.5">
               <Input
-                placeholder="Yeni kelime ekle..."
+                placeholder="Kelime ekle..."
                 value={dialogState.newKeyword}
                 onChange={(e) => updateDialogKeyword(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && addKeyword()}
-                className="bg-slate-800 border-slate-700 text-white"
+                className="h-8 text-xs bg-slate-800 border-slate-700 text-white"
               />
               <Button
                 onClick={addKeyword}
                 disabled={addingKeyword || !dialogState.newKeyword.trim()}
-                className="bg-orange-600 hover:bg-orange-700"
+                className="h-8 w-8 p-0 bg-orange-600 hover:bg-orange-700"
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-3.5 w-3.5" />
               </Button>
             </div>
 
-            {/* Keywords list */}
-            <div className="space-y-2 max-h-60 overflow-y-auto">
+            <div className="space-y-1.5 max-h-48 overflow-y-auto">
               {dialogFilters.length === 0 ? (
-                <p className="text-center text-slate-500 py-4">
-                  Henuz kelime eklenmemis. Kelime ekleyin.
-                </p>
+                <p className="text-center text-xs text-slate-500 py-4">Kelime yok</p>
               ) : (
                 dialogFilters.map((filter) => (
-                  <div
-                    key={filter.id}
-                    className="flex items-center justify-between rounded-lg bg-slate-800 px-3 py-2"
-                  >
-                    <Badge className="bg-orange-600/20 text-orange-400 border-orange-500/30">
+                  <div key={filter.id} className="flex items-center justify-between rounded bg-slate-800 px-2 py-1.5">
+                    <Badge className="text-[10px] bg-orange-600/20 text-orange-400 border-orange-500/30">
                       {filter.keyword}
                     </Badge>
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-7 w-7 p-0 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                      className="h-5 w-5 p-0 text-red-400 hover:bg-red-500/10"
                       onClick={() => deleteKeyword(filter.id)}
                     >
-                      <X className="h-4 w-4" />
+                      <X className="h-3 w-3" />
                     </Button>
                   </div>
                 ))
