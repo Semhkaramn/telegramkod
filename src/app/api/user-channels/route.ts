@@ -68,11 +68,12 @@ export async function GET(request: NextRequest) {
     }) as UserChannelWithChannel[];
 
     // BigInt'leri string'e dönüştür (JSON serileştirme için)
-    const serializedChannels = userChannels.map((uc) => ({
+    const serializedChannels = userChannels.map((uc: UserChannelWithChannel & { filterMode?: string }) => ({
       id: uc.id,
       userId: uc.userId,
       channelId: uc.channelId.toString(),
       paused: uc.paused,
+      filterMode: uc.filterMode || "all",
       channel: {
         channelId: uc.channel.channelId.toString(),
         channelName: uc.channel.channelName,
