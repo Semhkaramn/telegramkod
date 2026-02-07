@@ -367,12 +367,17 @@ export default function DashboardPage() {
                             src={uc.channel.channelPhoto}
                             alt=""
                             className="h-7 w-7 rounded-md object-cover border border-slate-700 shrink-0"
+                            onError={(e) => {
+                              // Resim yüklenemezse (expire olmuş URL) varsayılan ikona geç
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              target.nextElementSibling?.classList.remove('hidden');
+                            }}
                           />
-                        ) : (
-                          <div className={`h-7 w-7 rounded-md flex items-center justify-center shrink-0 ${uc.paused ? "bg-red-500/20" : "bg-blue-500/20"}`}>
-                            <Radio className={`h-3.5 w-3.5 ${uc.paused ? "text-red-400" : "text-blue-400"}`} />
-                          </div>
-                        )}
+                        ) : null}
+                        <div className={`h-7 w-7 rounded-md flex items-center justify-center shrink-0 ${uc.channel.channelPhoto ? 'hidden' : ''} ${uc.paused ? "bg-red-500/20" : "bg-blue-500/20"}`}>
+                          <Radio className={`h-3.5 w-3.5 ${uc.paused ? "text-red-400" : "text-blue-400"}`} />
+                        </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-xs font-medium text-white truncate">
                             {uc.channel.channelName || `Kanal ${uc.channelId}`}
