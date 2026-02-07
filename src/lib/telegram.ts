@@ -85,20 +85,25 @@ export async function fetchChannelInfoFromTelegram(
 
 // Son güncelleme zamanlarını takip et (gereksiz API çağrılarını önlemek için)
 const channelLastRefresh = new Map<string, number>();
-const REFRESH_INTERVAL = 5 * 60 * 1000; // 5 dakika
+const REFRESH_INTERVAL = 1 * 60 * 1000; // 1 dakika (daha sık güncelleme)
 
 /**
  * Tek bir kanalın bilgilerini güncelle (arka planda)
+ * @param channelId - Kanal ID'si
+ * @param forceRefresh - true ise cache'i atla ve mutlaka güncelle
  */
-export async function refreshChannelInfo(channelId: bigint): Promise<void> {
-  if (!BOT_TOKEN) return;
+export async function refreshChannelInfo(channelId: bigint, forceRefresh = false): Promise<void> {
+  if (!BOT_TOKEN) {
+    console.log("BOT_TOKEN ayarlanmamış, kanal güncellemesi atlanıyor");
+    return;
+  }
 
   const channelIdStr = channelId.toString();
   const lastRefresh = channelLastRefresh.get(channelIdStr) || 0;
   const now = Date.now();
 
-  // Son 5 dakika içinde güncellendiyse atla
-  if (now - lastRefresh < REFRESH_INTERVAL) {
+  // forceRefresh değilse ve son 1 dakika içinde güncellendiyse atla
+  if (!forceRefresh && now - lastRefresh < REFRESH_INTERVAL) {
     return;
   }
 
@@ -128,34 +133,47 @@ export async function refreshChannelInfo(channelId: bigint): Promise<void> {
 /**
  * Birden fazla kanalın bilgilerini arka planda güncelle
  * Issue #19: Site yüklendiğinde kanal bilgileri otomatik güncellenir
+ * @param channelIds - Kanal ID'leri
+ * @param forceRefresh - true ise cache'i atla ve mutlaka güncelle
  */
 export async function refreshChannelsInBackground(
-  channelIds: bigint[]
+  channelIds: bigint[],
+  forceRefresh = false
 ): Promise<void> {
-  if (!BOT_TOKEN || channelIds.length === 0) return;
+  if (!BOT_TOKEN || channelIds.length === 0) {
+    console.log("BOT_TOKEN yok veya kanal yok, güncelleme atlanıyor");
+    return;
+  }
+
+  console.log(`${channelIds.length} kanal güncelleniyor (forceRefresh: ${forceRefresh})`);
 
   // Paralel olarak güncelle (max 5 eşzamanlı)
   const batchSize = 5;
   for (let i = 0; i < channelIds.length; i += batchSize) {
     const batch = channelIds.slice(i, i + batchSize);
     await Promise.allSettled(
-      batch.map((channelId) => refreshChannelInfo(channelId))
+      batch.map((channelId) => refreshChannelInfo(channelId, forceRefresh))
     );
   }
 }
 
 /**
  * Tüm kanalların bilgilerini güncelle
+ * @param forceRefresh - true ise cache'i atla ve mutlaka güncelle
  */
-export async function refreshAllChannels(): Promise<void> {
-  if (!BOT_TOKEN) return;
+export async function refreshAllChannels(forceRefresh = false): Promise<void> {
+  if (!BOT_TOKEN) {
+    console.log("BOT_TOKEN ayarlanmamış, tüm kanallar güncellemesi atlanıyor");
+    return;
+  }
 
   try {
     const channels = await prisma.channel.findMany({
       select: { channelId: true },
     });
 
-    await refreshChannelsInBackground(channels.map((c) => c.channelId));
+    console.log(`Tüm kanallar güncelleniyor: ${channels.length} kanal`);
+    await refreshChannelsInBackground(channels.map((c) => c.channelId), forceRefresh);
   } catch (error) {
     console.error("Error refreshing all channels:", error);
   }
