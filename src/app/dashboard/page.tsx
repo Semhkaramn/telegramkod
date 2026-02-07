@@ -7,13 +7,14 @@ import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Radio, AlertTriangle, Filter, Plus, X, Settings2, Check } from "lucide-react";
+import { Radio, AlertTriangle, Filter, Plus, X, Settings2, Check, Search, FileText } from "lucide-react";
 
 interface Channel {
   channelId: string;
@@ -50,6 +51,9 @@ interface DialogState {
   channelId: string | null;
   channelName: string | null;
   newKeyword: string;
+  searchQuery: string;
+  bulkMode: boolean;
+  bulkKeywords: string;
 }
 
 export default function DashboardPage() {
@@ -65,6 +69,9 @@ export default function DashboardPage() {
     channelId: null,
     channelName: null,
     newKeyword: "",
+    searchQuery: "",
+    bulkMode: false,
+    bulkKeywords: "",
   });
 
   useEffect(() => {
@@ -159,11 +166,22 @@ export default function DashboardPage() {
       channelId: uc.channelId,
       channelName: uc.channel.channelName || `Kanal ${uc.channelId}`,
       newKeyword: "",
+      searchQuery: "",
+      bulkMode: false,
+      bulkKeywords: "",
     });
   };
 
   const closeKeywordDialog = () => {
-    setDialogState({ isOpen: false, channelId: null, channelName: null, newKeyword: "" });
+    setDialogState({
+      isOpen: false,
+      channelId: null,
+      channelName: null,
+      newKeyword: "",
+      searchQuery: "",
+      bulkMode: false,
+      bulkKeywords: "",
+    });
   };
 
   const updateDialogKeyword = (keyword: string) => {
@@ -196,6 +214,39 @@ export default function DashboardPage() {
     }
   };
 
+  const addBulkKeywords = async () => {
+    if (!dialogState.channelId || !dialogState.bulkKeywords.trim()) return;
+
+    setAddingKeyword(true);
+    const keywords = dialogState.bulkKeywords
+      .split("\n")
+      .map((k) => k.trim())
+      .filter((k) => k.length > 0);
+
+    try {
+      for (const keyword of keywords) {
+        const response = await fetch("/api/channel-filters", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            channelId: dialogState.channelId,
+            keyword: keyword,
+          }),
+        });
+
+        if (response.ok) {
+          const newFilter = await response.json();
+          setChannelFilters((prev) => [...prev, newFilter]);
+        }
+      }
+      setDialogState((prev) => ({ ...prev, bulkKeywords: "", bulkMode: false }));
+    } catch (error) {
+      console.error("Error:", error);
+    } finally {
+      setAddingKeyword(false);
+    }
+  };
+
   const deleteKeyword = async (id: number) => {
     try {
       const response = await fetch(`/api/channel-filters?id=${id}`, { method: "DELETE" });
@@ -208,12 +259,21 @@ export default function DashboardPage() {
   };
 
   const getFiltersForChannel = (channelId: string) => {
-    return channelFilters.filter((f) => f.channelId === channelId);
+    return channelFilters
+      .filter((f) => f.channelId === channelId)
+      .sort((a, b) => a.keyword.localeCompare(b.keyword, 'tr'));
   };
 
   const activeChannels = userChannels.filter((uc) => !uc.paused).length;
   const pausedChannels = userChannels.filter((uc) => uc.paused).length;
-  const dialogFilters = dialogState.channelId ? getFiltersForChannel(dialogState.channelId) : [];
+
+  // Dialog için filtreler - arama ve A-Z sıralı
+  const dialogFilters = dialogState.channelId
+    ? getFiltersForChannel(dialogState.channelId)
+        .filter((f) =>
+          f.keyword.toLowerCase().includes(dialogState.searchQuery.toLowerCase())
+        )
+    : [];
 
   if (loading) {
     return (
@@ -373,7 +433,7 @@ export default function DashboardPage() {
                       )}
                     </div>
 
-                    {/* Inline Keywords */}
+                    {/* Inline Keywords - A-Z sıralı */}
                     {uc.filterMode === "filtered" && filters.length > 0 && (
                       <div className="flex flex-wrap gap-1">
                         {filters.slice(0, 4).map((filter) => (
@@ -400,7 +460,7 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Keyword Dialog */}
+      {/* Keyword Dialog - Geliştirilmiş */}
       <Dialog open={dialogState.isOpen} onOpenChange={(open) => !open && closeKeywordDialog()}>
         <DialogContent className="border-slate-700 bg-slate-900 max-w-sm">
           <DialogHeader>
@@ -410,42 +470,106 @@ export default function DashboardPage() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            {/* Mod Seçimi */}
             <div className="flex gap-1.5">
-              <Input
-                placeholder="Kelime ekle..."
-                value={dialogState.newKeyword}
-                onChange={(e) => updateDialogKeyword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addKeyword()}
-                className="h-8 text-xs bg-slate-800 border-slate-700 text-white"
-              />
               <Button
-                onClick={addKeyword}
-                disabled={addingKeyword || !dialogState.newKeyword.trim()}
-                className="h-8 w-8 p-0 bg-orange-600 hover:bg-orange-700"
+                size="sm"
+                variant={!dialogState.bulkMode ? "default" : "outline"}
+                onClick={() => setDialogState((prev) => ({ ...prev, bulkMode: false }))}
+                className={`flex-1 h-7 text-xs ${!dialogState.bulkMode ? "bg-orange-600 hover:bg-orange-700" : "border-slate-600 text-slate-400"}`}
               >
-                <Plus className="h-3.5 w-3.5" />
+                <Plus className="h-3 w-3 mr-1" />
+                Tekli Ekle
+              </Button>
+              <Button
+                size="sm"
+                variant={dialogState.bulkMode ? "default" : "outline"}
+                onClick={() => setDialogState((prev) => ({ ...prev, bulkMode: true }))}
+                className={`flex-1 h-7 text-xs ${dialogState.bulkMode ? "bg-orange-600 hover:bg-orange-700" : "border-slate-600 text-slate-400"}`}
+              >
+                <FileText className="h-3 w-3 mr-1" />
+                Toplu Ekle
               </Button>
             </div>
 
+            {/* Tekli Ekleme */}
+            {!dialogState.bulkMode && (
+              <div className="flex gap-1.5">
+                <Input
+                  placeholder="Kelime ekle..."
+                  value={dialogState.newKeyword}
+                  onChange={(e) => updateDialogKeyword(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addKeyword()}
+                  className="h-8 text-xs bg-slate-800 border-slate-700 text-white"
+                />
+                <Button
+                  onClick={addKeyword}
+                  disabled={addingKeyword || !dialogState.newKeyword.trim()}
+                  className="h-8 w-8 p-0 bg-orange-600 hover:bg-orange-700"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )}
+
+            {/* Toplu Ekleme */}
+            {dialogState.bulkMode && (
+              <div className="space-y-2">
+                <Textarea
+                  placeholder="Her satira bir kelime yazin...&#10;kelime1&#10;kelime2&#10;kelime3"
+                  value={dialogState.bulkKeywords}
+                  onChange={(e) => setDialogState((prev) => ({ ...prev, bulkKeywords: e.target.value }))}
+                  className="h-24 text-xs bg-slate-800 border-slate-700 text-white resize-none"
+                />
+                <Button
+                  onClick={addBulkKeywords}
+                  disabled={addingKeyword || !dialogState.bulkKeywords.trim()}
+                  className="w-full h-8 text-xs bg-orange-600 hover:bg-orange-700"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Toplu Ekle ({dialogState.bulkKeywords.split("\n").filter((k) => k.trim()).length} kelime)
+                </Button>
+              </div>
+            )}
+
+            {/* Arama */}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+              <Input
+                placeholder="Kelime ara..."
+                value={dialogState.searchQuery}
+                onChange={(e) => setDialogState((prev) => ({ ...prev, searchQuery: e.target.value }))}
+                className="h-8 pl-8 text-xs bg-slate-800 border-slate-700 text-white"
+              />
+            </div>
+
+            {/* Kelime Listesi - A-Z sıralı */}
             <div className="space-y-1.5 max-h-48 overflow-y-auto">
               {dialogFilters.length === 0 ? (
-                <p className="text-center text-xs text-slate-500 py-4">Kelime yok</p>
+                <p className="text-center text-xs text-slate-500 py-4">
+                  {dialogState.searchQuery ? "Sonuc bulunamadi" : "Kelime yok"}
+                </p>
               ) : (
-                dialogFilters.map((filter) => (
-                  <div key={filter.id} className="flex items-center justify-between rounded bg-slate-800 px-2 py-1.5">
-                    <Badge className="text-[10px] bg-orange-600/20 text-orange-400 border-orange-500/30">
-                      {filter.keyword}
-                    </Badge>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-5 w-5 p-0 text-red-400 hover:bg-red-500/10"
-                      onClick={() => deleteKeyword(filter.id)}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ))
+                <>
+                  <p className="text-[10px] text-slate-500 px-1">
+                    {dialogFilters.length} kelime (A-Z sirali)
+                  </p>
+                  {dialogFilters.map((filter) => (
+                    <div key={filter.id} className="flex items-center justify-between rounded bg-slate-800 px-2 py-1.5">
+                      <Badge className="text-[10px] bg-orange-600/20 text-orange-400 border-orange-500/30">
+                        {filter.keyword}
+                      </Badge>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-5 w-5 p-0 text-red-400 hover:bg-red-500/10"
+                        onClick={() => deleteKeyword(filter.id)}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </>
               )}
             </div>
           </div>
