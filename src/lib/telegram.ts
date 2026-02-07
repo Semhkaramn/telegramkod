@@ -1,6 +1,8 @@
 /**
  * Issue #19 fix: Telegram API yardımcı fonksiyonları
  * Kanal fotoğrafları ve bilgileri otomatik güncelleme
+ *
+ * NOT: Telegram file URL'leri geçicidir (~1 saat). Her refresh'te yeniden alınmalı.
  */
 
 import { prisma } from "./db";
@@ -18,6 +20,7 @@ interface TelegramChannelInfo {
 
 /**
  * Telegram Bot API'den kanal bilgisi al
+ * NOT: photoUrl geçici bir URL'dir ve yaklaşık 1 saat sonra expire olur
  */
 export async function fetchChannelInfoFromTelegram(
   channelId: string
@@ -48,7 +51,7 @@ export async function fetchChannelInfoFromTelegram(
 
     const chat = data.result;
 
-    // Kanal fotoğrafını al
+    // Kanal fotoğrafını al - HER ZAMAN yeni URL al
     let photoUrl = null;
     if (chat.photo) {
       try {
@@ -61,11 +64,13 @@ export async function fetchChannelInfoFromTelegram(
           }
         );
         const fileData = await fileResponse.json();
-        if (fileData.ok) {
+        if (fileData.ok && fileData.result?.file_path) {
           photoUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${fileData.result.file_path}`;
         }
       } catch (e) {
         console.error("Error fetching channel photo:", e);
+        // Photo fetch failed, photoUrl stays null - this is intentional
+        // We don't want to keep stale/expired URLs
       }
     }
 
@@ -85,7 +90,7 @@ export async function fetchChannelInfoFromTelegram(
 
 // Son güncelleme zamanlarını takip et (gereksiz API çağrılarını önlemek için)
 const channelLastRefresh = new Map<string, number>();
-const REFRESH_INTERVAL = 1 * 60 * 1000; // 1 dakika (daha sık güncelleme)
+const REFRESH_INTERVAL = 5 * 60 * 1000; // 5 dakika (Telegram rate limit'e dikkat)
 
 /**
  * Tek bir kanalın bilgilerini güncelle (arka planda)
@@ -102,8 +107,9 @@ export async function refreshChannelInfo(channelId: bigint, forceRefresh = false
   const lastRefresh = channelLastRefresh.get(channelIdStr) || 0;
   const now = Date.now();
 
-  // forceRefresh değilse ve son 1 dakika içinde güncellendiyse atla
+  // forceRefresh değilse ve son 5 dakika içinde güncellendiyse atla
   if (!forceRefresh && now - lastRefresh < REFRESH_INTERVAL) {
+    console.log(`Kanal ${channelIdStr} yakın zamanda güncellendi, atlanıyor`);
     return;
   }
 
@@ -112,20 +118,26 @@ export async function refreshChannelInfo(channelId: bigint, forceRefresh = false
   try {
     const info = await fetchChannelInfoFromTelegram(channelIdStr);
     if (info) {
+      // HER ZAMAN tüm alanları güncelle (null olsa bile)
+      // Bu, expire olmuş foto URL'lerinin temizlenmesini sağlar
       await prisma.channel.update({
         where: { channelId },
         data: {
           channelName: info.title,
           channelUsername: info.username,
-          channelPhoto: info.photoUrl,
+          channelPhoto: info.photoUrl, // null olabilir - bu doğru davranış
           memberCount: info.memberCount,
           description: info.description,
           lastUpdated: new Date(),
         },
       });
+      console.log(`Kanal ${channelIdStr} güncellendi, foto: ${info.photoUrl ? 'var' : 'yok'}`);
+    } else {
+      console.log(`Kanal ${channelIdStr} bilgisi alınamadı`);
     }
   } catch (error) {
-    // Hata durumunda sessizce devam et
+    // Hata durumunda cache'i temizle ki tekrar denenebilsin
+    channelLastRefresh.delete(channelIdStr);
     console.error(`Error refreshing channel ${channelIdStr}:`, error);
   }
 }
@@ -147,13 +159,17 @@ export async function refreshChannelsInBackground(
 
   console.log(`${channelIds.length} kanal güncelleniyor (forceRefresh: ${forceRefresh})`);
 
-  // Paralel olarak güncelle (max 5 eşzamanlı)
-  const batchSize = 5;
+  // Paralel olarak güncelle (max 3 eşzamanlı - rate limit'e dikkat)
+  const batchSize = 3;
   for (let i = 0; i < channelIds.length; i += batchSize) {
     const batch = channelIds.slice(i, i + batchSize);
     await Promise.allSettled(
       batch.map((channelId) => refreshChannelInfo(channelId, forceRefresh))
     );
+    // Batch'ler arası kısa bekleme (rate limit için)
+    if (i + batchSize < channelIds.length) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
   }
 }
 
@@ -176,5 +192,20 @@ export async function refreshAllChannels(forceRefresh = false): Promise<void> {
     await refreshChannelsInBackground(channels.map((c) => c.channelId), forceRefresh);
   } catch (error) {
     console.error("Error refreshing all channels:", error);
+  }
+}
+
+/**
+ * Kanal fotoğrafının hala geçerli olup olmadığını kontrol et
+ * Telegram file URL'leri ~1 saat sonra expire olur
+ */
+export async function isPhotoUrlValid(photoUrl: string | null): Promise<boolean> {
+  if (!photoUrl) return false;
+
+  try {
+    const response = await fetch(photoUrl, { method: 'HEAD' });
+    return response.ok;
+  } catch {
+    return false;
   }
 }
