@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { invalidateCache } from "@/lib/cache";
-import { fetchChannelInfoFromTelegram, refreshAllChannels } from "@/lib/telegram";
+import { fetchChannelInfoFromTelegram, refreshAllChannels, refreshChannelsInBackground } from "@/lib/telegram";
 
 // GET - Tüm kanalları getir
 export async function GET(request: NextRequest) {
@@ -15,12 +15,21 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const refresh = searchParams.get("refresh") === "true";
 
-    // Refresh parametresi varsa arka planda güncelle
+    // Refresh parametresi varsa BEKLE ve güncelle (cache'i atla)
     if (refresh) {
-      // Arka planda çalıştır, hataları logla
-      refreshAllChannels().catch((error) => {
-        console.error("Arka plan kanal guncellemesi basarisiz:", error);
-      });
+      try {
+        const allChannels = await prisma.channel.findMany({
+          select: { channelId: true },
+        });
+        if (allChannels.length > 0) {
+          await refreshChannelsInBackground(
+            allChannels.map((c) => c.channelId),
+            true // forceRefresh = true
+          );
+        }
+      } catch (error) {
+        console.error("Kanal guncellemesi basarisiz:", error);
+      }
     }
 
     const channels = await prisma.channel.findMany({
