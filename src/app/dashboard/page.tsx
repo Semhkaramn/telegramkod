@@ -68,13 +68,14 @@ export default function DashboardPage() {
   });
 
   useEffect(() => {
-    fetchData();
+    // İlk yüklemede refresh=true ile kanal bilgilerini güncelle
+    fetchData(true);
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = async (refresh = false) => {
     try {
       const [channelsRes, userRes, filtersRes] = await Promise.all([
-        fetch("/api/user-channels"),
+        fetch(`/api/user-channels${refresh ? "?refresh=true" : ""}`),
         fetch("/api/auth/me"),
         fetch("/api/channel-filters"),
       ]);
