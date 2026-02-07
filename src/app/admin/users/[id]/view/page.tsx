@@ -56,15 +56,16 @@ export default function ViewUserPage() {
 
   useEffect(() => {
     if (userId) {
-      fetchData();
+      fetchData(true); // İlk yüklemede refresh=true ile güncel veriler al
     }
   }, [userId]);
 
-  const fetchData = async () => {
+  const fetchData = async (refresh = false) => {
     try {
+      // refresh=true ile güncel kanal fotoğraflarını al
       const [userRes, channelsRes, linksRes] = await Promise.all([
         fetch(`/api/users/${userId}`),
-        fetch(`/api/user-channels?userId=${userId}`),
+        fetch(`/api/user-channels?userId=${userId}${refresh ? "&refresh=true" : ""}`),
         fetch(`/api/admin-links?user_id=${userId}`),
       ]);
 
