@@ -245,21 +245,22 @@ def get_link_for_channel(channel_id: int, code: str, original_link: str) -> str:
                 return link_url
     return original_link
 
-def should_send_to_channel(channel_id: int, code: str, link: str) -> bool:
-    """Koda veya linke göre bu kanala gönderilmeli mi kontrol et"""
+def should_send_to_channel(channel_id: int, code: str, link: str) -> tuple[bool, str]:
+    """Koda veya linke göre bu kanala gönderilmeli mi kontrol et
+    Returns: (should_send, reason)
+    """
     filter_mode = channel_filter_mode.get(channel_id, "all")
 
     # Eğer filter_mode "all" ise tüm kodlar gönderilir
     if filter_mode == "all":
-        return True
+        return True, "all"
 
     # Eğer filter_mode "filtered" ise sadece belirli kelimeler gönderilir
     keywords = channel_filters.get(channel_id, set())
 
     # Eğer hiç keyword tanımlanmamışsa gönderme
     if not keywords:
-        log_info(f"⚠️ Kanal {channel_id} filtrelenmiş ama keyword yok, gönderilmedi")
-        return False
+        return False, "no_keywords"
 
     # Kod veya linkte keyword var mı kontrol et
     code_lower = code.lower()
@@ -267,11 +268,9 @@ def should_send_to_channel(channel_id: int, code: str, link: str) -> bool:
 
     for keyword in keywords:
         if keyword in code_lower or keyword in link_lower:
-            log_info(f"✅ Kanal {channel_id} için '{keyword}' kelimesi bulundu")
-            return True
+            return True, f"matched:{keyword}"
 
-    log_info(f"⛔ Kanal {channel_id} için eşleşen keyword bulunamadı, gönderilmedi")
-    return False
+    return False, "no_match"
 
 def maybe_refresh_cache():
     global cache_last_update
@@ -430,24 +429,23 @@ async def send_to_all_channels(code: str, link: str, source_channel: int):
         log_warning(f"HEDEF KANAL YOK! Kod: {code} | Kaynak: {source_name}")
         return
 
-    # Filtre kontrolü ile gönderilecek kanalları belirle
+    # Filtre kontrolü ile gönderilecek kanalları belirle (sessiz)
     channels_to_send = []
-    filtered_out = []
+    filtered_out_count = 0
 
     for channel_id in target_channels_cache:
-        if should_send_to_channel(channel_id, code, link):
+        should_send, _ = should_send_to_channel(channel_id, code, link)
+        if should_send:
             channels_to_send.append(channel_id)
         else:
-            filtered_out.append(channel_id)
-
-    if filtered_out:
-        log_info(f"🔍 Filtre sonucu: {len(channels_to_send)} kanala gönderilecek, {len(filtered_out)} kanal filtrelendi")
+            filtered_out_count += 1
 
     if not channels_to_send:
-        log_warning(f"Tüm kanallar filtrelendi! Kod: {code} | Kaynak: {source_name}")
+        log_info(f"⛔ Tüm kanallar filtrelendi ({filtered_out_count}) | Kod: {code} | Kaynak: {source_name}")
         return
 
-    log_info(f"📤 GÖNDERİM BAŞLIYOR | Kod: {code} | Kaynak: {source_name} | Hedef Kanal Sayısı: {len(channels_to_send)}")
+    # Sadece özet bilgi logla
+    log_info(f"📤 GÖNDERİM | Kod: {code} | Kaynak: {source_name} | Hedef: {len(channels_to_send)} kanal (filtrelenen: {filtered_out_count})")
 
     tasks = []
     for channel_id in channels_to_send:
@@ -466,7 +464,9 @@ async def send_to_all_channels(code: str, link: str, source_channel: int):
         else:
             fail_count += 1
 
-    log_info(f"📊 GÖNDERİM TAMAMLANDI | Kod: {code} | Başarılı: {success_count} | Başarısız: {fail_count} | Filtrelenen: {len(filtered_out)}")
+    # Sadece başarısız varsa detaylı log
+    if fail_count > 0:
+        log_info(f"📊 SONUÇ | Kod: {code} | Başarılı: {success_count} | Başarısız: {fail_count}")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # MESAJ İŞLEME
