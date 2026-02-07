@@ -317,12 +317,16 @@ export default function ChannelsPage() {
                         src={channelPreview.photoUrl}
                         alt={channelPreview.title}
                         className="w-12 h-12 rounded-lg object-cover"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          target.nextElementSibling?.classList.remove('hidden');
+                        }}
                       />
-                    ) : (
-                      <div className="w-12 h-12 rounded-lg bg-slate-700 flex items-center justify-center">
-                        <Radio className="h-6 w-6 text-slate-400" />
-                      </div>
-                    )}
+                    ) : null}
+                    <div className={`w-12 h-12 rounded-lg bg-slate-700 flex items-center justify-center ${channelPreview.photoUrl ? 'hidden' : ''}`}>
+                      <Radio className="h-6 w-6 text-slate-400" />
+                    </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-slate-100 truncate">{channelPreview.title}</p>
                       <p className="text-sm text-slate-400">
@@ -385,12 +389,17 @@ export default function ChannelsPage() {
                         src={channel.channel_photo}
                         alt={channel.channel_name || "Kanal"}
                         className="w-10 h-10 rounded-lg object-cover"
+                        onError={(e) => {
+                          // Resim yüklenemezse (expire olmuş URL) varsayılan ikona geç
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          target.nextElementSibling?.classList.remove('hidden');
+                        }}
                       />
-                    ) : (
-                      <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
-                        <Radio className="h-5 w-5 text-blue-400" />
-                      </div>
-                    )}
+                    ) : null}
+                    <div className={`w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center border border-blue-500/30 ${channel.channel_photo ? 'hidden' : ''}`}>
+                      <Radio className="h-5 w-5 text-blue-400" />
+                    </div>
                     <div>
                       <CardTitle className="text-slate-100 text-lg">
                         {channel.channel_name || `Kanal ${channel.channel_id}`}
