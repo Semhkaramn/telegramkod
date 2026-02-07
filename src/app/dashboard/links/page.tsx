@@ -14,7 +14,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Link2, Plus, Trash2, Radio, Edit2, Save, Search, Info, ArrowRight, Lightbulb } from "lucide-react";
+import { Link2, Plus, Trash2, Radio, Edit2, Save, Search, Info, ArrowRight, Lightbulb, X, Check, Pencil } from "lucide-react";
 
 interface AdminLink {
   id: number;
@@ -36,6 +36,13 @@ interface UserChannel {
   channel: Channel;
 }
 
+// Edit state interface for managing inline editing
+interface EditState {
+  id: number | null;
+  link_code: string;
+  link_url: string;
+}
+
 export default function LinksPage() {
   const [userChannels, setUserChannels] = useState<UserChannel[]>([]);
   const [links, setLinks] = useState<AdminLink[]>([]);
@@ -44,11 +51,19 @@ export default function LinksPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isBulkDialogOpen, setIsBulkDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [saving, setSaving] = useState(false);
 
   // Form states
   const [linkCode, setLinkCode] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [bulkLinks, setBulkLinks] = useState("");
+
+  // Edit state for inline editing
+  const [editState, setEditState] = useState<EditState>({
+    id: null,
+    link_code: "",
+    link_url: "",
+  });
 
   useEffect(() => {
     fetchData();
@@ -83,6 +98,7 @@ export default function LinksPage() {
   const handleAddLink = async () => {
     if (!selectedChannel || !linkCode || !linkUrl) return;
 
+    setSaving(true);
     try {
       const response = await fetch("/api/admin-links", {
         method: "POST",
@@ -102,12 +118,15 @@ export default function LinksPage() {
       }
     } catch (error) {
       console.error("Error adding link:", error);
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleBulkAdd = async () => {
     if (!selectedChannel || !bulkLinks.trim()) return;
 
+    setSaving(true);
     const lines = bulkLinks.split("\n").filter((l) => l.trim());
     const linksToAdd: { code: string; url: string }[] = [];
 
@@ -141,6 +160,8 @@ export default function LinksPage() {
       fetchData();
     } catch (error) {
       console.error("Error adding bulk links:", error);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -151,10 +172,62 @@ export default function LinksPage() {
       });
 
       if (response.ok) {
-        fetchData();
+        setLinks((prev) => prev.filter((l) => l.id !== id));
       }
     } catch (error) {
       console.error("Error deleting link:", error);
+    }
+  };
+
+  // Start editing a link
+  const startEditing = (link: AdminLink) => {
+    setEditState({
+      id: link.id,
+      link_code: link.link_code,
+      link_url: link.link_url,
+    });
+  };
+
+  // Cancel editing
+  const cancelEditing = () => {
+    setEditState({
+      id: null,
+      link_code: "",
+      link_url: "",
+    });
+  };
+
+  // Save edited link
+  const saveEdit = async () => {
+    if (!editState.id || !editState.link_code || !editState.link_url) return;
+
+    setSaving(true);
+    try {
+      const response = await fetch("/api/admin-links", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editState.id,
+          link_code: editState.link_code,
+          link_url: editState.link_url.startsWith("http") ? editState.link_url : `https://${editState.link_url}`,
+        }),
+      });
+
+      if (response.ok) {
+        // Update local state
+        setLinks((prev) =>
+          prev.map((l) =>
+            l.id === editState.id
+              ? { ...l, link_code: editState.link_code, link_url: editState.link_url.startsWith("http") ? editState.link_url : `https://${editState.link_url}` }
+              : l
+          )
+        );
+        cancelEditing();
+      }
+    } catch (error) {
+      console.error("Error updating link:", error);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -185,10 +258,10 @@ export default function LinksPage() {
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             <Link2 className="h-7 w-7 text-blue-500" />
-            Link Özelleştirme
+            Link Ozellestirme
           </h1>
           <p className="text-slate-400 mt-1">
-            Kanallarınız için özel linkler tanımlayın
+            Kanallariniz icin ozel linkler tanimlayin
           </p>
         </div>
       </div>
@@ -198,7 +271,7 @@ export default function LinksPage() {
         <CardHeader className="pb-3">
           <CardTitle className="text-white flex items-center gap-2 text-lg">
             <Lightbulb className="h-5 w-5 text-yellow-400" />
-            Nasıl Çalışır?
+            Nasil Calisir?
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -207,18 +280,18 @@ export default function LinksPage() {
               <Info className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
               <span>
                 <strong className="text-white">Link Kodu:</strong> Gelen mesajlarda veya kodlarda aranacak kelime.
-                Örneğin "google" yazarsanız, mesajda "google" geçtiğinde link değiştirilir.
+                Ornegin "google" yazarsaniz, mesajda "google" gectiginde link degistirilir.
               </span>
             </p>
             <p className="flex items-start gap-2">
               <Info className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
               <span>
                 <strong className="text-white">Link URL:</strong> Bulunan kelimenin yerine koyulacak link.
-                Bu sizin özel linkiniz olacak.
+                Bu sizin ozel linkiniz olacak.
               </span>
             </p>
             <div className="p-4 mt-3 rounded-xl bg-slate-800/50 border border-slate-700">
-              <p className="text-blue-300 font-medium mb-2">Örnek Kullanım:</p>
+              <p className="text-blue-300 font-medium mb-2">Ornek Kullanim:</p>
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-sm">
                 <div className="flex items-center gap-2">
                   <Badge className="bg-blue-600/20 text-blue-400 border-blue-500/30">google</Badge>
@@ -226,14 +299,11 @@ export default function LinksPage() {
                 </div>
                 <ArrowRight className="h-4 w-4 text-slate-500 hidden sm:block" />
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-400">→</span>
+                  <span className="text-slate-400">-&gt;</span>
                   <span className="text-green-400">https://sizin-linkiniz.com</span>
-                  <span className="text-slate-400">ile değiştirilir</span>
+                  <span className="text-slate-400">ile degistirilir</span>
                 </div>
               </div>
-              <p className="text-slate-500 text-xs mt-3">
-                Mesajda "Hemen google.com'a gir" yazıyorsa → "Hemen https://sizin-linkiniz.com'a gir" olarak değiştirilir.
-              </p>
             </div>
           </div>
         </CardContent>
@@ -243,9 +313,9 @@ export default function LinksPage() {
         <Card className="border-slate-700 bg-slate-900">
           <CardContent className="py-12 text-center">
             <Radio className="mx-auto h-12 w-12 text-slate-600" />
-            <p className="mt-4 text-slate-400">Henüz atanmış kanalınız yok.</p>
+            <p className="mt-4 text-slate-400">Henuz atanmis kanaliniz yok.</p>
             <p className="text-sm text-slate-500">
-              Süper admin tarafından kanal atanması gerekiyor.
+              Super admin tarafindan kanal atanmasi gerekiyor.
             </p>
           </CardContent>
         </Card>
@@ -253,7 +323,7 @@ export default function LinksPage() {
         <>
           {/* Channel Selector */}
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-sm text-slate-400">Kanal Seçin:</span>
+            <span className="text-sm text-slate-400">Kanal Secin:</span>
             {userChannels.map((uc) => (
               <Button
                 key={uc.channelId}
@@ -298,13 +368,13 @@ export default function LinksPage() {
                     <div>
                       <label className="text-sm text-slate-400">Link Kodu (Aranacak Kelime)</label>
                       <Input
-                        placeholder="Örnek: google, deneme, test"
+                        placeholder="Ornek: google, deneme, test"
                         value={linkCode}
                         onChange={(e) => setLinkCode(e.target.value)}
                         className="mt-1 border-slate-700 bg-slate-800 text-white focus:border-blue-500"
                       />
                       <p className="mt-1 text-xs text-blue-400">
-                        Mesajda bu kelime geçtiğinde link değiştirilir
+                        Mesajda bu kelime gectiginde link degistirilir
                       </p>
                     </div>
                     <div>
@@ -319,7 +389,7 @@ export default function LinksPage() {
                     <Button
                       onClick={handleAddLink}
                       className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600"
-                      disabled={!linkCode || !linkUrl}
+                      disabled={!linkCode || !linkUrl || saving}
                     >
                       <Save className="mr-2 h-4 w-4" />
                       Kaydet
@@ -342,7 +412,7 @@ export default function LinksPage() {
                   <div className="space-y-4 pt-4">
                     <div>
                       <label className="text-sm text-slate-400">
-                        Her satıra bir link yazın (kod + URL)
+                        Her satira bir link yazin (kod + URL)
                       </label>
                       <Textarea
                         placeholder={`deneme www.deneme.com\ngoogle www.google.com\ntest https://test.com`}
@@ -354,7 +424,7 @@ export default function LinksPage() {
                     <Button
                       onClick={handleBulkAdd}
                       className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600"
-                      disabled={!bulkLinks.trim()}
+                      disabled={!bulkLinks.trim() || saving}
                     >
                       <Save className="mr-2 h-4 w-4" />
                       Hepsini Ekle
@@ -365,19 +435,19 @@ export default function LinksPage() {
             </div>
           </div>
 
-          {/* Links List */}
+          {/* Links Table/List */}
           <Card className="border-slate-700 bg-slate-900">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-white">
                 <Link2 className="h-5 w-5 text-blue-500" />
-                Link Özelleştirmeleri
+                Link Ozellestirmeleri
                 <Badge variant="secondary" className="ml-2 bg-slate-800 text-slate-400">
                   {filteredLinks.length} link
                 </Badge>
               </CardTitle>
               {searchQuery && (
                 <CardDescription className="text-slate-400">
-                  "{searchQuery}" için arama sonuçları
+                  "{searchQuery}" icin arama sonuclari
                 </CardDescription>
               )}
             </CardHeader>
@@ -386,46 +456,142 @@ export default function LinksPage() {
                 <div className="py-8 text-center">
                   <Link2 className="mx-auto h-12 w-12 text-slate-600" />
                   <p className="mt-4 text-slate-400">
-                    {searchQuery ? "Arama sonucu bulunamadı." : "Bu kanal için henüz link eklenmemiş."}
+                    {searchQuery ? "Arama sonucu bulunamadi." : "Bu kanal icin henuz link eklenmemis."}
                   </p>
                   <p className="text-sm text-slate-500">
                     {!searchQuery && '"Link Ekle" butonunu kullanarak ekleyebilirsiniz.'}
                   </p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {filteredLinks.map((link) => (
-                    <div
-                      key={link.id}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-800/50 p-4 hover:bg-slate-800 transition-colors"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <Badge className="bg-blue-600/20 text-blue-400 border-blue-500/30">
-                            {link.link_code}
-                          </Badge>
-                          <ArrowRight className="h-4 w-4 text-slate-500 hidden sm:block" />
-                          <span className="text-slate-400 sm:hidden">→</span>
-                          <a
-                            href={link.link_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm text-slate-400 hover:text-blue-400 truncate max-w-md"
-                          >
-                            {link.link_url}
-                          </a>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-red-400 hover:bg-red-500/10 hover:text-red-300"
-                        onClick={() => handleDeleteLink(link.id)}
+                <div className="overflow-x-auto">
+                  {/* Table Header */}
+                  <div className="hidden sm:grid sm:grid-cols-12 gap-4 px-4 py-3 bg-slate-800/50 rounded-t-lg border-b border-slate-700 text-sm font-medium text-slate-400">
+                    <div className="col-span-1">#</div>
+                    <div className="col-span-3">Arama Kodu</div>
+                    <div className="col-span-6">Hedef URL</div>
+                    <div className="col-span-2 text-right">Islemler</div>
+                  </div>
+
+                  {/* Table Body */}
+                  <div className="divide-y divide-slate-700/50">
+                    {filteredLinks.map((link, index) => (
+                      <div
+                        key={link.id}
+                        className={`group px-4 py-3 transition-colors ${
+                          editState.id === link.id
+                            ? "bg-blue-900/20 border border-blue-500/30 rounded-lg my-1"
+                            : "hover:bg-slate-800/50"
+                        }`}
                       >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
+                        {editState.id === link.id ? (
+                          // Edit Mode
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2 text-sm text-blue-400 font-medium">
+                              <Pencil className="h-4 w-4" />
+                              Duzenleme Modu
+                            </div>
+                            <div className="grid sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-xs text-slate-400 mb-1 block">Arama Kodu</label>
+                                <Input
+                                  value={editState.link_code}
+                                  onChange={(e) => setEditState((prev) => ({ ...prev, link_code: e.target.value }))}
+                                  className="bg-slate-800 border-slate-600 text-white focus:border-blue-500"
+                                  placeholder="Arama kodu..."
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-slate-400 mb-1 block">Hedef URL</label>
+                                <Input
+                                  value={editState.link_url}
+                                  onChange={(e) => setEditState((prev) => ({ ...prev, link_url: e.target.value }))}
+                                  className="bg-slate-800 border-slate-600 text-white focus:border-blue-500"
+                                  placeholder="https://..."
+                                />
+                              </div>
+                            </div>
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={cancelEditing}
+                                className="border-slate-600 text-slate-400 hover:bg-slate-700"
+                              >
+                                <X className="h-4 w-4 mr-1" />
+                                Iptal
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={saveEdit}
+                                disabled={saving || !editState.link_code || !editState.link_url}
+                                className="bg-green-600 hover:bg-green-700 text-white"
+                              >
+                                <Check className="h-4 w-4 mr-1" />
+                                Kaydet
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          // View Mode
+                          <div className="grid sm:grid-cols-12 gap-4 items-center">
+                            {/* Index */}
+                            <div className="hidden sm:block col-span-1 text-slate-500 text-sm">
+                              {index + 1}
+                            </div>
+
+                            {/* Link Code */}
+                            <div className="sm:col-span-3">
+                              <div className="flex items-center gap-2">
+                                <span className="sm:hidden text-xs text-slate-500">Kod:</span>
+                                <Badge className="bg-blue-600/20 text-blue-400 border-blue-500/30 font-medium">
+                                  {link.link_code}
+                                </Badge>
+                              </div>
+                            </div>
+
+                            {/* Link URL */}
+                            <div className="sm:col-span-6 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="sm:hidden text-xs text-slate-500">URL:</span>
+                                <ArrowRight className="h-4 w-4 text-slate-500 shrink-0 hidden sm:block" />
+                                <a
+                                  href={link.link_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-sm text-slate-300 hover:text-blue-400 truncate transition-colors"
+                                  title={link.link_url}
+                                >
+                                  {link.link_url}
+                                </a>
+                              </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="sm:col-span-2 flex justify-end gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => startEditing(link)}
+                                className="h-8 w-8 p-0 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Duzenle"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleDeleteLink(link.id)}
+                                className="h-8 w-8 p-0 text-slate-400 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Sil"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </CardContent>
