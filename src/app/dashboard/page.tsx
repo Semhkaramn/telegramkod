@@ -12,7 +12,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Radio, AlertTriangle, Filter, Plus, X, Settings2, Check } from "lucide-react";
 
@@ -46,15 +45,29 @@ interface UserInfo {
   isBanned: boolean;
 }
 
+// Dialog state interface for managing each channel's dialog independently
+interface DialogState {
+  isOpen: boolean;
+  channelId: string | null;
+  channelName: string | null;
+  newKeyword: string;
+}
+
 export default function DashboardPage() {
   const [userChannels, setUserChannels] = useState<UserChannel[]>([]);
   const [channelFilters, setChannelFilters] = useState<ChannelFilter[]>([]);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
-  const [selectedChannel, setSelectedChannel] = useState<UserChannel | null>(null);
-  const [newKeyword, setNewKeyword] = useState("");
   const [addingKeyword, setAddingKeyword] = useState(false);
+
+  // Fixed: Use a single dialog state object instead of shared state
+  const [dialogState, setDialogState] = useState<DialogState>({
+    isOpen: false,
+    channelId: null,
+    channelName: null,
+    newKeyword: "",
+  });
 
   useEffect(() => {
     fetchData();
@@ -148,8 +161,34 @@ export default function DashboardPage() {
     }
   };
 
+  // Fixed: Open dialog with specific channel data
+  const openKeywordDialog = (uc: UserChannel) => {
+    setDialogState({
+      isOpen: true,
+      channelId: uc.channelId,
+      channelName: uc.channel.channelName || `Kanal ${uc.channelId}`,
+      newKeyword: "",
+    });
+  };
+
+  // Fixed: Close dialog and reset state
+  const closeKeywordDialog = () => {
+    setDialogState({
+      isOpen: false,
+      channelId: null,
+      channelName: null,
+      newKeyword: "",
+    });
+  };
+
+  // Fixed: Update keyword input for the current dialog
+  const updateDialogKeyword = (keyword: string) => {
+    setDialogState((prev) => ({ ...prev, newKeyword: keyword }));
+  };
+
+  // Fixed: Add keyword using dialog state instead of shared state
   const addKeyword = async () => {
-    if (!selectedChannel || !newKeyword.trim()) return;
+    if (!dialogState.channelId || !dialogState.newKeyword.trim()) return;
 
     setAddingKeyword(true);
     try {
@@ -157,15 +196,16 @@ export default function DashboardPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          channelId: selectedChannel.channelId,
-          keyword: newKeyword.trim(),
+          channelId: dialogState.channelId,
+          keyword: dialogState.newKeyword.trim(),
         }),
       });
 
       if (response.ok) {
         const newFilter = await response.json();
         setChannelFilters((prev) => [...prev, newFilter]);
-        setNewKeyword("");
+        // Clear only the keyword input, keep dialog open
+        setDialogState((prev) => ({ ...prev, newKeyword: "" }));
       }
     } catch (error) {
       console.error("Error adding keyword:", error);
@@ -194,6 +234,11 @@ export default function DashboardPage() {
 
   const activeChannels = userChannels.filter((uc) => !uc.paused).length;
   const pausedChannels = userChannels.filter((uc) => uc.paused).length;
+
+  // Get filters for the currently open dialog
+  const dialogFilters = dialogState.channelId
+    ? getFiltersForChannel(dialogState.channelId)
+    : [];
 
   if (loading) {
     return (
@@ -372,78 +417,15 @@ export default function DashboardPage() {
                         </div>
 
                         {uc.filterMode === "filtered" && (
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="border-slate-600 text-slate-300 hover:bg-slate-700"
-                                onClick={() => setSelectedChannel(uc)}
-                              >
-                                <Settings2 className="h-4 w-4 mr-2" />
-                                Kelimeleri Yonet ({filters.length})
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className="border-slate-700 bg-slate-900">
-                              <DialogHeader>
-                                <DialogTitle className="text-white flex items-center gap-2">
-                                  <Filter className="h-5 w-5 text-orange-400" />
-                                  Filtre Kelimeleri - {uc.channel.channelName || `Kanal ${uc.channelId}`}
-                                </DialogTitle>
-                              </DialogHeader>
-                              <div className="space-y-4 pt-4">
-                                <p className="text-sm text-slate-400">
-                                  Sadece asagidaki kelimeleri iceren kodlar bu kanala gonderilir.
-                                </p>
-
-                                {/* Add new keyword */}
-                                <div className="flex gap-2">
-                                  <Input
-                                    placeholder="Yeni kelime ekle..."
-                                    value={newKeyword}
-                                    onChange={(e) => setNewKeyword(e.target.value)}
-                                    onKeyDown={(e) => e.key === "Enter" && addKeyword()}
-                                    className="bg-slate-800 border-slate-700 text-white"
-                                  />
-                                  <Button
-                                    onClick={addKeyword}
-                                    disabled={addingKeyword || !newKeyword.trim()}
-                                    className="bg-orange-600 hover:bg-orange-700"
-                                  >
-                                    <Plus className="h-4 w-4" />
-                                  </Button>
-                                </div>
-
-                                {/* Keywords list */}
-                                <div className="space-y-2 max-h-60 overflow-y-auto">
-                                  {filters.length === 0 ? (
-                                    <p className="text-center text-slate-500 py-4">
-                                      Henuz kelime eklenmemis. Kelime ekleyin.
-                                    </p>
-                                  ) : (
-                                    filters.map((filter) => (
-                                      <div
-                                        key={filter.id}
-                                        className="flex items-center justify-between rounded-lg bg-slate-800 px-3 py-2"
-                                      >
-                                        <Badge className="bg-orange-600/20 text-orange-400 border-orange-500/30">
-                                          {filter.keyword}
-                                        </Badge>
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          className="h-7 w-7 p-0 text-red-400 hover:bg-red-500/10 hover:text-red-300"
-                                          onClick={() => deleteKeyword(filter.id)}
-                                        >
-                                          <X className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                    ))
-                                  )}
-                                </div>
-                              </div>
-                            </DialogContent>
-                          </Dialog>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-slate-600 text-slate-300 hover:bg-slate-700"
+                            onClick={() => openKeywordDialog(uc)}
+                          >
+                            <Settings2 className="h-4 w-4 mr-2" />
+                            Kelimeleri Yonet ({filters.length})
+                          </Button>
                         )}
                       </div>
 
@@ -479,6 +461,69 @@ export default function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Fixed: Single controlled dialog for managing keywords */}
+      <Dialog open={dialogState.isOpen} onOpenChange={(open) => !open && closeKeywordDialog()}>
+        <DialogContent className="border-slate-700 bg-slate-900">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Filter className="h-5 w-5 text-orange-400" />
+              Filtre Kelimeleri - {dialogState.channelName}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <p className="text-sm text-slate-400">
+              Sadece asagidaki kelimeleri iceren kodlar bu kanala gonderilir.
+            </p>
+
+            {/* Add new keyword */}
+            <div className="flex gap-2">
+              <Input
+                placeholder="Yeni kelime ekle..."
+                value={dialogState.newKeyword}
+                onChange={(e) => updateDialogKeyword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addKeyword()}
+                className="bg-slate-800 border-slate-700 text-white"
+              />
+              <Button
+                onClick={addKeyword}
+                disabled={addingKeyword || !dialogState.newKeyword.trim()}
+                className="bg-orange-600 hover:bg-orange-700"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Keywords list */}
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {dialogFilters.length === 0 ? (
+                <p className="text-center text-slate-500 py-4">
+                  Henuz kelime eklenmemis. Kelime ekleyin.
+                </p>
+              ) : (
+                dialogFilters.map((filter) => (
+                  <div
+                    key={filter.id}
+                    className="flex items-center justify-between rounded-lg bg-slate-800 px-3 py-2"
+                  >
+                    <Badge className="bg-orange-600/20 text-orange-400 border-orange-500/30">
+                      {filter.keyword}
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                      onClick={() => deleteKeyword(filter.id)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
