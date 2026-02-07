@@ -216,7 +216,8 @@ export default function LinksPage() {
     .filter((link) =>
       link.link_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
       link.link_url.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    )
+    .sort((a, b) => a.link_code.localeCompare(b.link_code, 'tr'));
 
   if (loading) {
     return (
