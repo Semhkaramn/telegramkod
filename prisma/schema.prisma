@@ -31,10 +31,11 @@ model User {
 
 // Kullanıcı-Kanal ilişkisi
 model UserChannel {
-  id        Int     @id @default(autoincrement())
-  userId    Int     @map("user_id")
-  channelId BigInt  @map("channel_id")
-  paused    Boolean @default(true)
+  id         Int     @id @default(autoincrement())
+  userId     Int     @map("user_id")
+  channelId  BigInt  @map("channel_id")
+  paused     Boolean @default(true)
+  filterMode String  @default("all") @map("filter_mode") // "all" = tüm kodlar, "filtered" = belirli kodlar
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   channel Channel @relation(fields: [channelId], references: [channelId], onDelete: Cascade)
@@ -57,6 +58,7 @@ model Channel {
   createdAt       DateTime @default(now()) @map("created_at")
 
   userChannels UserChannel[]
+  filters      ChannelFilter[]
 
   @@map("channels")
 }
@@ -74,4 +76,18 @@ model AdminLink {
 
   @@unique([userId, channelId, linkCode])
   @@map("admin_links")
+}
+
+// Kanal Filtreleri (kanal bazlı kelime filtreleme)
+// Sadece bu kelimeleri içeren kodlar/linkler o kanala gönderilir
+model ChannelFilter {
+  id        Int      @id @default(autoincrement())
+  channelId BigInt   @map("channel_id")
+  keyword   String   // Filtrelenecek kelime (kod veya linkte aranacak)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  channel Channel @relation(fields: [channelId], references: [channelId], onDelete: Cascade)
+
+  @@unique([channelId, keyword])
+  @@map("channel_filters")
 }
