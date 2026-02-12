@@ -9,7 +9,6 @@ import time
 import os
 import sys
 import logging
-from datetime import datetime
 import httpx
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
@@ -274,7 +273,11 @@ def should_send_to_user_channel(user_id: int, channel_id: int, code: str, link: 
     code_lower = code.lower()
     link_lower = link.lower()
 
-    for keyword in keywords:
+    # Keyword'leri uzunluğa göre büyükten küçüğe sırala
+    # Bu sayede "supertotobet" önce kontrol edilir, "otobet" sonra
+    sorted_keywords = sorted(keywords, key=len, reverse=True)
+
+    for keyword in sorted_keywords:
         if keyword in code_lower or keyword in link_lower:
             return True, f"matched:{keyword}"
 
