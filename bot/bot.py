@@ -242,7 +242,13 @@ def get_link_for_user_channel(user_id: int, channel_id: int, code: str, original
     links = admin_links_cache.get((user_id, channel_id), {})
     code_lower = code.lower()
     link_lower = original_link.lower()
-    for link_code, link_url in links.items():
+
+    # Link kodlarını uzunluğa göre büyükten küçüğe sırala
+    # Bu sayede "supertotobet" önce kontrol edilir, "otobet" sonra
+    # Böylece "supertotobet" içinde "otobet" bulunması sorunu önlenir
+    sorted_links = sorted(links.items(), key=lambda x: len(x[0]), reverse=True)
+
+    for link_code, link_url in sorted_links:
         if link_code in code_lower or link_code in link_lower:
             return link_url
     return original_link
