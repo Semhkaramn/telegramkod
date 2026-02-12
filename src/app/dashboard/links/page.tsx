@@ -139,17 +139,20 @@ export default function LinksPage() {
     }
 
     try {
-      for (const link of linksToAdd) {
-        await fetch("/api/admin-links", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            channel_id: selectedChannel,
-            link_code: link.code,
-            link_url: link.url,
-          }),
-        });
-      }
+      // Paralel olarak tüm linkleri ekle (daha hızlı)
+      await Promise.all(
+        linksToAdd.map((link) =>
+          fetch("/api/admin-links", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              channel_id: selectedChannel,
+              link_code: link.code,
+              link_url: link.url,
+            }),
+          })
+        )
+      );
       setBulkLinks("");
       setIsBulkDialogOpen(false);
       fetchData();
