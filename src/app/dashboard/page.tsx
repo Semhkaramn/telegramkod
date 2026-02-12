@@ -224,21 +224,23 @@ export default function DashboardPage() {
       .filter((k) => k.length > 0);
 
     try {
-      for (const keyword of keywords) {
-        const response = await fetch("/api/channel-filters", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            channelId: dialogState.channelId,
-            keyword: keyword,
-          }),
-        });
+      // Paralel olarak tüm keyword'leri ekle (daha hızlı)
+      const results = await Promise.all(
+        keywords.map((keyword) =>
+          fetch("/api/channel-filters", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              channelId: dialogState.channelId,
+              keyword: keyword,
+            }),
+          }).then((res) => (res.ok ? res.json() : null))
+        )
+      );
 
-        if (response.ok) {
-          const newFilter = await response.json();
-          setChannelFilters((prev) => [...prev, newFilter]);
-        }
-      }
+      // Başarılı eklenen filtreleri state'e ekle
+      const newFilters = results.filter((r) => r !== null);
+      setChannelFilters((prev) => [...prev, ...newFilters]);
       setDialogState((prev) => ({ ...prev, bulkKeywords: "", bulkMode: false }));
     } catch (error) {
       console.error("Error:", error);
