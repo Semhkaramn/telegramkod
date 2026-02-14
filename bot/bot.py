@@ -94,7 +94,8 @@ BANNED_WORDS = {
     "geliyor",
     "hazirla",
     "için",
-    "kimler"
+    "kimler",
+    "BamcooSiteler"
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
