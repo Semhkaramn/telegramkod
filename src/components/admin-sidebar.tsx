@@ -164,7 +164,7 @@ export function AdminSidebar({ user }: AdminSidebarProps) {
   return (
     <>
       {/* Mobile Header */}
-      <div className="fixed top-0 left-0 right-0 z-50 flex h-16 items-center justify-between border-b border-slate-700/50 bg-slate-900/95 backdrop-blur px-4 lg:hidden">
+      <div className="fixed top-0 left-0 right-0 z-50 flex h-16 items-center justify-between border-b border-slate-700/50 bg-slate-900 px-4 lg:hidden">
         <Link href="/admin" className="flex items-center gap-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600">
             <svg
