@@ -380,7 +380,7 @@ export default function ChannelsPage() {
           </Card>
         ) : (
           channels.map((channel) => (
-            <Card key={channel.channel_id} className="bg-slate-900/50 border-slate-700/50 backdrop-blur-sm">
+            <Card key={channel.channel_id} className="bg-slate-900 border-slate-700">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -464,25 +464,30 @@ export default function ChannelsPage() {
                           Kullanıcı Ata
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="bg-slate-900 border-slate-700">
+                      <DialogContent className="bg-slate-900 border-slate-700 max-w-md">
                         <DialogHeader>
                           <DialogTitle className="text-slate-100">Kullanıcı Ata</DialogTitle>
                           <DialogDescription className="text-slate-400">
                             Bu kanala kullanıcı atayın
                           </DialogDescription>
                         </DialogHeader>
-                        <div className="space-y-3 mt-4">
+                        <div className="space-y-3 mt-4 max-h-[60vh] overflow-y-auto pr-1">
                           {channel.users.length > 0 && (
                             <div className="space-y-2 pb-4 border-b border-slate-800">
-                              <p className="text-sm text-slate-400">Atanmış Kullanıcılar</p>
+                              <p className="text-sm font-medium text-slate-300">Atanmış Kullanıcılar ({channel.users.length})</p>
                               {channel.users.map((user) => (
-                                <div key={user.id} className="flex items-center justify-between p-2 rounded bg-slate-800/50">
-                                  <span className="text-slate-100">{user.username}</span>
+                                <div key={user.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-800 border border-slate-700">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-green-500/20 border border-green-500/30 flex items-center justify-center text-green-400 text-sm font-medium">
+                                      {user.username[0].toUpperCase()}
+                                    </div>
+                                    <span className="text-slate-100 font-medium">{user.username}</span>
+                                  </div>
                                   <Button
                                     size="sm"
-                                    variant="ghost"
+                                    variant="outline"
                                     onClick={() => handleRemoveUser(user.id, channel.channel_id)}
-                                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                    className="text-red-400 border-red-500/30 hover:bg-red-500/10 hover:text-red-300"
                                   >
                                     Kaldır
                                   </Button>
@@ -490,27 +495,31 @@ export default function ChannelsPage() {
                               ))}
                             </div>
                           )}
-                          <p className="text-sm text-slate-400">Mevcut Kullanıcılar</p>
-                          {users
-                            .filter((u: any) => u.role !== "superadmin" && !channel.users.some((cu) => cu.id === u.id))
-                            .map((user) => (
-                              <div
-                                key={user.id}
-                                className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors cursor-pointer"
-                                onClick={() => handleAssignUser(user.id)}
-                              >
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 text-sm">
-                                    {user.username[0].toUpperCase()}
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium text-slate-300">
+                              Mevcut Kullanıcılar ({users.filter((u: any) => u.role !== "superadmin" && !channel.users.some((cu) => cu.id === u.id)).length})
+                            </p>
+                            {users
+                              .filter((u: any) => u.role !== "superadmin" && !channel.users.some((cu) => cu.id === u.id))
+                              .map((user) => (
+                                <div
+                                  key={user.id}
+                                  className="flex items-center justify-between p-3 rounded-lg bg-slate-800 border border-slate-700 hover:border-blue-500/50 hover:bg-slate-800/80 transition-all cursor-pointer"
+                                  onClick={() => handleAssignUser(user.id)}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 text-sm font-medium">
+                                      {user.username[0].toUpperCase()}
+                                    </div>
+                                    <span className="text-slate-100 font-medium">{user.username}</span>
                                   </div>
-                                  <span className="text-slate-100">{user.username}</span>
+                                  <Plus className="h-5 w-5 text-blue-400" />
                                 </div>
-                                <Plus className="h-4 w-4 text-slate-500" />
-                              </div>
-                            ))}
-                          {users.filter((u: any) => u.role !== "superadmin" && !channel.users.some((cu) => cu.id === u.id)).length === 0 && (
-                            <p className="text-slate-500 text-center py-4">Tüm kullanıcılar zaten atanmış</p>
-                          )}
+                              ))}
+                            {users.filter((u: any) => u.role !== "superadmin" && !channel.users.some((cu) => cu.id === u.id)).length === 0 && (
+                              <p className="text-slate-500 text-center py-6 bg-slate-800/50 rounded-lg">Tüm kullanıcılar zaten atanmış</p>
+                            )}
+                          </div>
                         </div>
                       </DialogContent>
                     </Dialog>
