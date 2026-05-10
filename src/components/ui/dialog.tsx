@@ -85,13 +85,13 @@ const DialogContent = React.forwardRef<
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 bg-black/80"
         onClick={() => setOpen(false)}
       />
       <div
         ref={ref}
         className={cn(
-          "relative z-50 w-full max-w-lg rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-2xl animate-in fade-in-0 zoom-in-95",
+          "relative z-50 w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-2xl animate-in fade-in-0 zoom-in-95",
           className
         )}
         {...props}
