@@ -92,11 +92,9 @@
   background: linear-gradient(180deg, hsl(222 47% 8%) 0%, hsl(222 47% 6%) 100%);
 }
 
-/* Glass effect */
+/* Glass effect - without blur for better performance */
 .glass {
-  background: rgba(30, 41, 59, 0.5);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(30, 41, 59, 0.95);
 }
 
 /* Hover effects */
