@@ -70,21 +70,9 @@ CHANNEL_NAMES = {
     -1003795422286: "eser"
 }
 
-KEYWORDS = {
-    "bahi̇s1000",
-    "eli̇t",
-    "grand",
-    "hizli",
-    "jojobet",
-    "kavbet",
-    "mavi̇bet",
-    "pusula",
-    "pusulabet",
-    "turbo",
-    "turboslot",
-    "megabahis",
-    "matbet"
-}
+# Tek kelimelik isimler artık otomatik kabul ediliyor
+# Bu set sadece birden fazla kelimeli özel durumlar için kullanılır
+KEYWORDS = set()
 
 BANNED_WORDS = {
     "aktif",
@@ -549,14 +537,19 @@ async def process_message(event):
         # FORMAT 1: anahtar_kelime\nkod\nlink
         if len(lines) >= 3:
             first_line_lower = lines[0].lower()
-            if first_line_lower in KEYWORDS:
+            # Tek kelimelik ise direkt kabul et, yoksa KEYWORDS'de olmalı
+            is_single_word = ' ' not in first_line_lower and '\t' not in first_line_lower
+            if is_single_word or first_line_lower in KEYWORDS:
                 potential_code = lines[1]
                 potential_link = lines[2]
 
                 if re.match(code_pattern, potential_code) and re.match(link_pattern, potential_link, re.IGNORECASE):
                     code = potential_code
                     link = potential_link
-                    format_type = "FORMAT-1 (keyword+kod+link)"
+                    if is_single_word:
+                        format_type = f"FORMAT-1 (tek_kelime:{lines[0]}+kod+link)"
+                    else:
+                        format_type = f"FORMAT-1 (keyword:{lines[0]}+kod+link)"
 
         # FORMAT 2: kod\nlink
         if not code:
